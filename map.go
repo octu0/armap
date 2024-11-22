@@ -7,31 +7,6 @@ import (
 	"github.com/dolthub/maphash"
 )
 
-type MapOptionFunc func(*mapOption)
-type mapOption struct {
-	chunkSize       int
-	initialCapacity int
-	arenaOptions    []arena.Option
-}
-
-func WithChunkSize(size int) MapOptionFunc {
-	return func(opt *mapOption) {
-		opt.chunkSize = size
-	}
-}
-
-func WithInitialCapacity(size int) MapOptionFunc {
-	return func(opt *mapOption) {
-		opt.initialCapacity = size
-	}
-}
-
-func WithArenaOptions(opts []arena.Option) MapOptionFunc {
-	return func(opt *mapOption) {
-		opt.arenaOptions = opts
-	}
-}
-
 type entry[K comparable, V any] struct {
 	hash  uint64
 	key   K
@@ -87,7 +62,7 @@ func (m *Map[K, V]) Set(key K, value V) (old V, found bool) {
 		updated = true
 	}
 
-	m.reset(updated, hash)
+	m.update(updated, hash)
 	return
 }
 
@@ -105,7 +80,7 @@ func (m *Map[K, V]) Delete(key K) (old V, found bool) {
 		m.entries[len(m.entries)-1] = entry[K, V]{} // nil
 		m.entries = m.entries[:len(m.entries)-1]
 
-		m.reset(true, hash)
+		m.update(true, hash)
 	}
 	return
 }
@@ -118,7 +93,7 @@ func (m *Map[K, V]) Scan(iter func(K, V) bool) {
 	}
 }
 
-func (m *Map[K, V]) reset(updated bool, hash uint64) {
+func (m *Map[K, V]) update(keyUpdated bool, hash uint64) {
 	if len(m.entries) < 1 {
 		m.idxTail = 0
 		m.idxMid = 0
@@ -126,7 +101,7 @@ func (m *Map[K, V]) reset(updated bool, hash uint64) {
 		return
 	}
 
-	if updated {
+	if keyUpdated {
 		tmp := m.entries[0:]
 		if m.mid < hash {
 			tmp = m.entries[m.idxMid:]
@@ -170,15 +145,12 @@ func (m *Map[K, V]) nearby(hash uint64, start, end int) int {
 
 func (m *Map[K, V]) Clear() {
 	m.entries = m.entries[len(m.entries):]
-	m.reset(true, 0)
+	m.update(true, 0)
 	m.arena.Reset()
 }
 
-func New[K comparable, V any](funcs ...MapOptionFunc) *Map[K, V] {
-	opt := &mapOption{
-		chunkSize:       1024,
-		initialCapacity: 1,
-	}
+func NewMap[K comparable, V any](funcs ...OptionFunc) *Map[K, V] {
+	opt := newOption()
 	for _, fn := range funcs {
 		fn(opt)
 	}

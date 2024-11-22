@@ -1,37 +1,11 @@
 package armap
 
 import (
-	"fmt"
 	"strconv"
 	"testing"
 )
 
-func ExampleBasic() {
-	m := New[string, string](
-		WithChunkSize(1*1024*1024), // 1MB chunk size
-		WithInitialCapacity(1000),  // initial map capacity
-	)
-
-	m.Set("hello", "world1")
-	v, ok := m.Get("hello")
-	fmt.Println(v, ok)
-
-	m.Set("hello", "world2")
-	v, ok = m.Get("hello")
-	fmt.Println(v, ok)
-
-	m.Clear()
-
-	_, ok = m.Get("hello")
-	fmt.Println(ok)
-
-	// Output:
-	// world1 true
-	// world2 true
-	// false
-}
-
-func Benchmark(b *testing.B) {
+func BenchmarkMap(b *testing.B) {
 	b.Run("map", func(tb *testing.B) {
 		m := make(map[int]int, tb.N)
 		for i := 0; i < tb.N; i += 1 {
@@ -45,7 +19,7 @@ func Benchmark(b *testing.B) {
 		}
 	})
 	b.Run("armap", func(tb *testing.B) {
-		m := New[int, int](
+		m := NewMap[int, int](
 			WithChunkSize(4*1024*1024),
 			WithInitialCapacity(tb.N),
 		)
@@ -61,10 +35,10 @@ func Benchmark(b *testing.B) {
 	})
 }
 
-func TestSet(t *testing.T) {
+func TestMap(t *testing.T) {
 	t.Run("10000", func(tt *testing.T) {
 		N := 10_000
-		m := New[string, string](
+		m := NewMap[string, string](
 			WithChunkSize(4*1024*1024),
 			WithInitialCapacity(N),
 		)
@@ -81,7 +55,7 @@ func TestSet(t *testing.T) {
 		}
 		for _, k := range keys {
 			if v, ok := m.Get(k); ok != true {
-				tt.Errorf("key %s is already Set", k)
+				tt.Errorf("key %s is already set", k)
 			} else {
 				if v != k {
 					tt.Errorf("value %s is %s", v, k)
@@ -97,9 +71,14 @@ func TestSet(t *testing.T) {
 				}
 			}
 		}
+		for _, k := range keys {
+			if _, ok := m.Get(k); ok {
+				tt.Errorf("key %s is deleted", k)
+			}
+		}
 	})
 
-	t.Run("str,str", func(tt *testing.T) {
+	t.Run("string,string", func(tt *testing.T) {
 		key1 := "key1"
 		value1 := key1 + ".value"
 
@@ -109,7 +88,7 @@ func TestSet(t *testing.T) {
 		key3 := "key3"
 		value3 := key3 + ".value"
 
-		m := New[string, string]()
+		m := NewMap[string, string]()
 		old1, found1 := m.Set(key1, value1)
 		if found1 {
 			tt.Errorf("key1 is not exists: %s", old1)

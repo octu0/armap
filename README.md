@@ -5,11 +5,13 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/octu0/armap)](https://goreportcard.com/report/github.com/octu0/armap)
 [![Releases](https://img.shields.io/github/v/release/octu0/armap)](https://github.com/octu0/armap/releases)
 
-SortedHashMap on [Arena](https://github.com/alecthomas/arena)
+HashMap on [Arena](https://github.com/alecthomas/arena)
 
 features:
-- generics support
-- minimal GC overhead map implements
+- [Generics](https://go.dev/doc/tutorial/generics) support
+- `Map` and `Set` types
+- Minimal GC overhead map implements
+- `comparable` key hash function uses [maphash](https://github.com/dolthub/maphash)
 
 ## Installation
 
@@ -23,15 +25,15 @@ go get github.com/octu0/armap
 package main
 
 import (
-	"log"
+	"fmt"
 
 	"github.com/octu0/armap"
 )
 
 func main() {
-	m := New[string, string](
-		WithChunkSize(4*1024*1024), // 4MB chunk size
-		WithInitialCapacity(1000),  // initial map capacity
+	m := armap.NewMap[string, string](
+		armap.WithChunkSize(4*1024*1024), // 4MB chunk size
+		armap.WithInitialCapacity(1000),  // initial map capacity
 	)
 
 	m.Set("hello", "world1")
