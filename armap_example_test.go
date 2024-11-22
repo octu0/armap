@@ -29,7 +29,7 @@ func ExampleMap() {
 	// false
 }
 
-func ExampleKey() {
+func ExampleSet() {
 	s := NewSet[string](
 		WithChunkSize(1*1024*1024), // 1MB chunk size
 		WithInitialCapacity(1000),  // initial map capacity
