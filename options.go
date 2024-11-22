@@ -1,37 +1,26 @@
 package armap
 
-import (
-	"github.com/alecthomas/arena"
-)
-
 type OptionFunc func(*option)
 type option struct {
-	chunkSize       int
-	initialCapacity int
-	arenaOptions    []arena.Option
+	capacity   int
+	loadFactor float64
 }
 
-func WithChunkSize(size int) OptionFunc {
+func WithCapacity(size int) OptionFunc {
 	return func(opt *option) {
-		opt.chunkSize = size
+		opt.capacity = size
 	}
 }
 
-func WithInitialCapacity(size int) OptionFunc {
+func WithLoadFactor(rate float64) OptionFunc {
 	return func(opt *option) {
-		opt.initialCapacity = size
-	}
-}
-
-func WithArenaOptions(opts []arena.Option) OptionFunc {
-	return func(opt *option) {
-		opt.arenaOptions = opts
+		opt.loadFactor = rate
 	}
 }
 
 func newOption() *option {
 	return &option{
-		chunkSize:       1024,
-		initialCapacity: 1,
+		capacity:   64,
+		loadFactor: 0.75,
 	}
 }

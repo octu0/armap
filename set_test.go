@@ -19,10 +19,8 @@ func BenchmarkSet(b *testing.B) {
 		}
 	})
 	b.Run("armap", func(tb *testing.B) {
-		m := NewSet[int](
-			WithChunkSize(4*1024*1024),
-			WithInitialCapacity(tb.N),
-		)
+		a := NewArena(1024*1024, 4)
+		m := NewSet[int](a, WithCapacity(tb.N))
 		for i := 0; i < tb.N; i += 1 {
 			m.Add(i)
 		}
@@ -38,10 +36,8 @@ func BenchmarkSet(b *testing.B) {
 func TestSet(t *testing.T) {
 	t.Run("10000", func(tt *testing.T) {
 		N := 10_000
-		m := NewSet[string](
-			WithChunkSize(4*1024*1024),
-			WithInitialCapacity(N),
-		)
+		a := NewArena(1024*1024, 4)
+		m := NewSet[string](a, WithCapacity(N))
 
 		keys := make([]string, N)
 		for i := 0; i < N; i += 1 {
@@ -70,7 +66,8 @@ func TestSet(t *testing.T) {
 		}
 	})
 	t.Run("string", func(tt *testing.T) {
-		s := NewSet[string]()
+		a := NewArena(1000, 10)
+		s := NewSet[string](a)
 		if ok := s.Add("test1"); ok {
 			tt.Errorf("test1 is new key")
 		}

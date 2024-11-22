@@ -35,8 +35,12 @@ func (s *Set[K]) Clear() {
 	s.m.Clear()
 }
 
-func NewSet[K comparable](funcs ...OptionFunc) *Set[K] {
+func (s *Set[K]) Release() {
+	s.m.Release()
+}
+
+func NewSet[K comparable](arena Arena, funcs ...OptionFunc) *Set[K] {
 	return &Set[K]{
-		m: NewMap[K, setValue](funcs...),
+		m: NewMap[K, setValue](arena, funcs...),
 	}
 }

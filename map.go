@@ -1,164 +1,134 @@
 package armap
 
 import (
-	"sort"
+	"fmt"
+	"strings"
 
-	"github.com/alecthomas/arena"
 	"github.com/dolthub/maphash"
 )
 
-type entry[K comparable, V any] struct {
-	hash  uint64
-	key   K
-	value V
-}
-
 type Map[K comparable, V any] struct {
-	arena   *arena.Arena
-	entries []entry[K, V]
-	hasher  maphash.Hasher[K]
-
-	idxMid  int
-	idxTail int
-	head    uint64
-	mid     uint64
-	tail    uint64
+	arena      Arena
+	hasher     maphash.Hasher[K]
+	buckets    []*LinkedList[K, V]
+	size       int
+	capacity   int
+	loadFactor float64
 }
 
 func (m *Map[K, V]) Len() int {
-	return len(m.entries)
+	return m.size
 }
 
-func (m *Map[K, V]) Get(key K) (old V, found bool) {
-	if len(m.entries) < 1 {
-		return
-	}
+func (m *Map[K, V]) currentRate() float64 {
+	return float64(m.size) / float64(m.capacity)
+}
 
+func (m *Map[K, V]) resize() {
+	tmp := NewMap[K, V](m.arena, WithCapacity(m.capacity*2), WithLoadFactor(m.loadFactor))
+	tmp.hasher = m.hasher
+	for _, b := range m.buckets {
+		b.Scan(func(key K, value V) bool {
+			tmp.Set(key, value)
+			return true
+		})
+	}
+	m.buckets = tmp.buckets
+	m.size = tmp.size
+	m.capacity = tmp.capacity
+}
+
+func (m *Map[K, V]) index(key K) uint64 {
 	hash := m.hasher.Hash(key)
-	i := m.search(hash)
-	if m.entries[i].key == key {
-		old = m.entries[i].value
-		found = true
+	return hash % uint64(m.capacity)
+}
+
+func (m *Map[K, V]) Set(key K, value V) (old V, found bool) {
+	if m.loadFactor < m.currentRate() {
+		m.resize()
+	}
+	i := m.index(key)
+	b := m.buckets[i]
+	old, found = b.Push(key, value)
+	if found != true {
+		m.size += 1
 	}
 	return
 }
 
-func (m *Map[K, V]) Set(key K, value V) (old V, found bool) {
-	hash := m.hasher.Hash(key)
-	e := entry[K, V]{hash, key, value}
-
-	if 0 < len(m.entries) {
-		i := m.search(hash)
-		if m.entries[i].key == key {
-			found = true
-			old = m.entries[i].value
-			m.entries[i] = e
-		}
-	}
-
-	updated := false
-	if found != true {
-		m.entries = arena.Append(m.arena, m.entries, e)
-		updated = true
-	}
-
-	m.update(updated, hash)
+func (m *Map[K, V]) Get(key K) (old V, found bool) {
+	i := m.index(key)
+	b := m.buckets[i]
+	old, found = b.Get(key)
 	return
 }
 
 func (m *Map[K, V]) Delete(key K) (old V, found bool) {
-	if len(m.entries) < 1 {
-		return
-	}
-
-	hash := m.hasher.Hash(key)
-	i := m.search(hash)
-	if m.entries[i].key == key {
-		old = m.entries[i].value
-		found = true
-		m.entries[i] = m.entries[len(m.entries)-1]
-		m.entries[len(m.entries)-1] = entry[K, V]{} // nil
-		m.entries = m.entries[:len(m.entries)-1]
-
-		m.update(true, hash)
+	i := m.index(key)
+	b := m.buckets[i]
+	old, found = b.Delete(key)
+	if found {
+		m.size -= 1
 	}
 	return
 }
 
 func (m *Map[K, V]) Scan(iter func(K, V) bool) {
-	for _, ent := range m.entries {
-		if iter(ent.key, ent.value) != true {
-			return
+	stop := false
+	for _, b := range m.buckets {
+		if stop {
+			break
 		}
-	}
-}
-
-func (m *Map[K, V]) update(keyUpdated bool, hash uint64) {
-	if len(m.entries) < 1 {
-		m.idxTail = 0
-		m.idxMid = 0
-		m.head, m.mid, m.tail = 0, 0, 0
-		return
-	}
-
-	if keyUpdated {
-		tmp := m.entries[0:]
-		if m.mid < hash {
-			tmp = m.entries[m.idxMid:]
-		}
-
-		sort.Slice(tmp, func(i, j int) bool {
-			return tmp[i].hash < tmp[j].hash
+		b.Scan(func(key K, value V) bool {
+			if iter(key, value) != true {
+				stop = true
+				return false
+			}
+			return true
 		})
 	}
-
-	m.idxTail = len(m.entries) - 1
-	m.idxMid = m.idxTail / 2
-	m.head = m.entries[0].hash
-	m.mid = m.entries[m.idxMid].hash
-	m.tail = m.entries[m.idxTail].hash
-}
-
-func (m *Map[K, V]) search(hash uint64) int {
-	if m.mid < hash {
-		if m.tail < hash {
-			return m.idxTail
-		}
-		return m.nearby(hash, m.idxMid, m.idxTail)
-	}
-	if hash < m.head {
-		return 0
-	}
-	return m.nearby(hash, 0, m.idxMid)
-}
-
-func (m *Map[K, V]) nearby(hash uint64, start, end int) int {
-	tmp := m.entries[start:end]
-	idx := sort.Search(len(tmp), func(i int) bool {
-		if hash <= tmp[i].hash {
-			return true
-		}
-		return false
-	})
-	return start + idx
 }
 
 func (m *Map[K, V]) Clear() {
-	m.entries = m.entries[len(m.entries):]
-	m.update(true, 0)
-	m.arena.Reset()
+	ba := NewTypeArena[*LinkedList[K, V]](m.arena)
+	m.buckets = ba.MakeSlice(m.capacity, m.capacity)
+	for i := 0; i < m.capacity; i += 1 {
+		m.buckets[i] = NewLinkedList[K, V](m.arena)
+	}
+	m.size = 0
+	m.arena.reset()
 }
 
-func NewMap[K comparable, V any](funcs ...OptionFunc) *Map[K, V] {
+func (m *Map[K, V]) Release() {
+	m.arena.release()
+}
+
+func (m *Map[K, V]) dump() string {
+	sb := new(strings.Builder)
+	for i, b := range m.buckets {
+		fmt.Fprintf(sb, "bucket[%d] = %v\n", i, b.dumpKeys())
+	}
+	return sb.String()
+}
+
+func NewMap[K comparable, V any](arena Arena, funcs ...OptionFunc) *Map[K, V] {
 	opt := newOption()
 	for _, fn := range funcs {
 		fn(opt)
 	}
 
-	a := arena.Create(opt.chunkSize, opt.arenaOptions...)
-	return &Map[K, V]{
-		arena:   a,
-		entries: arena.Make[entry[K, V]](a, 0, opt.initialCapacity),
-		hasher:  maphash.NewHasher[K](),
+	a := NewTypeArena[Map[K, V]](arena)
+	ba := NewTypeArena[*LinkedList[K, V]](arena)
+	buckets := ba.MakeSlice(opt.capacity, opt.capacity)
+	for i := 0; i < opt.capacity; i += 1 {
+		buckets[i] = NewLinkedList[K, V](arena)
 	}
+	return a.NewValue(Map[K, V]{
+		arena:      arena,
+		hasher:     maphash.NewHasher[K](),
+		buckets:    buckets,
+		size:       0,
+		capacity:   opt.capacity,
+		loadFactor: opt.loadFactor,
+	})
 }

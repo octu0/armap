@@ -19,10 +19,8 @@ func BenchmarkMap(b *testing.B) {
 		}
 	})
 	b.Run("armap", func(tb *testing.B) {
-		m := NewMap[int, int](
-			WithChunkSize(4*1024*1024),
-			WithInitialCapacity(tb.N),
-		)
+		a := NewArena(1024*1024, 4)
+		m := NewMap[int, int](a, WithCapacity(tb.N))
 		for i := 0; i < tb.N; i += 1 {
 			m.Set(i, i)
 		}
@@ -36,12 +34,10 @@ func BenchmarkMap(b *testing.B) {
 }
 
 func TestMap(t *testing.T) {
-	t.Run("10000", func(tt *testing.T) {
-		N := 10_000
-		m := NewMap[string, string](
-			WithChunkSize(4*1024*1024),
-			WithInitialCapacity(N),
-		)
+	t.Run("1000", func(tt *testing.T) {
+		N := 10
+		a := NewArena(1024*1024, 4)
+		m := NewMap[string, string](a, WithCapacity(N))
 
 		keys := make([]string, N)
 		for i := 0; i < N; i += 1 {
@@ -53,6 +49,9 @@ func TestMap(t *testing.T) {
 				tt.Errorf("key %s is new key", k)
 			}
 		}
+
+		tt.Logf("dump keys \n%s", m.dump())
+
 		for _, k := range keys {
 			if v, ok := m.Get(k); ok != true {
 				tt.Errorf("key %s is already set", k)
@@ -62,6 +61,7 @@ func TestMap(t *testing.T) {
 				}
 			}
 		}
+
 		for _, k := range keys {
 			if v, ok := m.Delete(k); ok != true {
 				tt.Errorf("key %s exists", k)
@@ -71,6 +71,9 @@ func TestMap(t *testing.T) {
 				}
 			}
 		}
+
+		tt.Logf("dump keys \n%s", m.dump())
+
 		for _, k := range keys {
 			if _, ok := m.Get(k); ok {
 				tt.Errorf("key %s is deleted", k)
@@ -88,7 +91,8 @@ func TestMap(t *testing.T) {
 		key3 := "key3"
 		value3 := key3 + ".value"
 
-		m := NewMap[string, string]()
+		a := NewArena(1000, 10)
+		m := NewMap[string, string](a)
 		old1, found1 := m.Set(key1, value1)
 		if found1 {
 			tt.Errorf("key1 is not exists: %s", old1)
