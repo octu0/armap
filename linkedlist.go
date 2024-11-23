@@ -6,10 +6,45 @@ type node[K comparable, V any] struct {
 	value V
 }
 
-type LinkedList[K comparable, V any] struct {
+type nodePool[K comparable, V any] struct {
 	ta   TypeArena[node[K, V]]
-	head *node[K, V]
-	size int
+	pool []*node[K, V]
+}
+
+func (p *nodePool[K, V]) Get(newFunc func(*node[K, V])) *node[K, V] {
+	if len(p.pool) < 1 {
+		n := p.ta.New()
+		newFunc(n)
+		return n
+	}
+	n := p.pool[0]
+	p.pool = p.pool[1:]
+	newFunc(n)
+	return n
+}
+
+func (p *nodePool[K, V]) Put(n *node[K, V]) {
+	var emptyK K
+	var emptyV V
+	n.next = nil
+	n.key = emptyK
+	n.value = emptyV
+	p.pool = append(p.pool, n)
+}
+
+func newNodePool[K comparable, V any](arena Arena) *nodePool[K, V] {
+	// no uses arena space
+	return &nodePool[K, V]{
+		ta:   NewTypeArena[node[K, V]](arena),
+		pool: make([]*node[K, V], 0),
+	}
+}
+
+type LinkedList[K comparable, V any] struct {
+	arena Arena
+	pool  *nodePool[K, V]
+	head  *node[K, V]
+	size  int
 }
 
 func (l *LinkedList[K, V]) Len() int {
@@ -30,7 +65,11 @@ func (l *LinkedList[K, V]) Push(key K, value V) (old V, found bool) {
 		}
 		curr = curr.next
 	}
-	l.head = l.ta.NewValue(node[K, V]{l.head, key, value})
+	l.head = l.pool.Get(func(n *node[K, V]) {
+		n.next = l.head
+		n.key = key
+		n.value = value
+	})
 	l.size += 1
 	return
 }
@@ -54,7 +93,11 @@ func (l *LinkedList[K, V]) Delete(key K) (old V, found bool) {
 		if l.head.key == key {
 			old = l.head.value
 			found = true
-			l.head = l.head.next
+
+			next := l.head.next
+			curr := l.head
+			l.pool.Put(curr)
+			l.head = next
 			return
 		}
 	}
@@ -69,6 +112,7 @@ func (l *LinkedList[K, V]) Delete(key K) (old V, found bool) {
 			old = curr.value
 			found = true
 			prev.next = curr.next
+			l.pool.Put(curr)
 			l.size -= 1
 			return
 		}
@@ -109,16 +153,21 @@ func (l *LinkedList[K, V]) Scan(iter func(K, V) bool) {
 func (l *LinkedList[K, V]) Clear() {
 	l.head = nil
 	l.size = 0
-	l.ta.Reset()
+	l.arena.reset()
 }
 
 func (l *LinkedList[K, V]) Release() {
-	l.ta.Release()
+	l.arena.release()
 }
 
 func NewLinkedList[K comparable, V any](arena Arena) *LinkedList[K, V] {
+	return NewLinkedListWithPool(arena, newNodePool[K, V](arena))
+}
+
+func NewLinkedListWithPool[K comparable, V any](arena Arena, pool *nodePool[K, V]) *LinkedList[K, V] {
 	a := NewTypeArena[LinkedList[K, V]](arena)
 	return a.NewValue(LinkedList[K, V]{
-		ta: NewTypeArena[node[K, V]](arena),
+		arena: arena,
+		pool:  pool,
 	})
 }
