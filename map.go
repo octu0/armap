@@ -10,7 +10,7 @@ import (
 type monotonicBuckets[K comparable, V any] struct {
 	arena   Arena
 	pool    *nodePool[K, V]
-	buckets [][]*LinkedList[K, V]
+	buckets [][]LinkedList[K, V]
 	stride  int
 }
 
@@ -21,14 +21,15 @@ func (m *monotonicBuckets[K, V]) Cap() int {
 func (m *monotonicBuckets[K, V]) Get(index int) *LinkedList[K, V] {
 	y := index / m.stride
 	x := index - (y * m.stride)
-	return m.buckets[y][x]
+	return &m.buckets[y][x]
 }
 
 func (m *monotonicBuckets[K, V]) Grow() {
-	ba := NewTypeArena[*LinkedList[K, V]](m.arena)
+	ba := NewTypeArena[LinkedList[K, V]](m.arena)
 	s := ba.MakeSlice(m.stride, m.stride)
 	for i := 0; i < m.stride; i += 1 {
-		s[i] = NewLinkedListWithPool[K, V](m.arena, m.pool)
+		s[i].arena = m.arena
+		s[i].pool = m.pool
 	}
 	m.buckets = append(m.buckets, s)
 }
@@ -92,7 +93,7 @@ func newMonotonicBuckets[K comparable, V any](arena Arena, pool *nodePool[K, V],
 	m := &monotonicBuckets[K, V]{
 		arena:   arena,
 		pool:    pool,
-		buckets: make([][]*LinkedList[K, V], 0), // no uses arena space
+		buckets: make([][]LinkedList[K, V], 0), // no uses arena space
 		stride:  stride,
 	}
 	m.Grow()
@@ -200,7 +201,7 @@ func NewMap[K comparable, V any](arena Arena, funcs ...OptionFunc) *Map[K, V] {
 
 	a := NewTypeArena[Map[K, V]](arena)
 	pool := newNodePool[K, V](arena)
-	return a.NativeNewValue(func(m *Map[K, V]) {
+	return a.NewValue(func(m *Map[K, V]) {
 		m.arena = arena
 		m.hasher = maphash.NewHasher[K]()
 		m.buckets = newMonotonicBuckets[K, V](arena, pool, opt.capacity)

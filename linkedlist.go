@@ -164,7 +164,7 @@ func NewLinkedList[K comparable, V any](arena Arena) *LinkedList[K, V] {
 
 func NewLinkedListWithPool[K comparable, V any](arena Arena, pool *nodePool[K, V]) *LinkedList[K, V] {
 	a := NewTypeArena[LinkedList[K, V]](arena)
-	return a.NativeNewValue(func(l *LinkedList[K, V]) {
+	return a.NewValue(func(l *LinkedList[K, V]) {
 		l.arena = arena
 		l.pool = pool
 	})
