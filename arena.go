@@ -33,8 +33,11 @@ func NewArena(bufferSize, bufferCount int) Arena {
 
 type TypeArena[T any] interface {
 	New() *T
-	NewValue(T) *T
+	NativeNew() *T
+	NewValue(func(*T)) *T
+	NativeNewValue(func(*T)) *T
 	MakeSlice(int, int) []T
+	NativeMakeSlice(int, int) []T
 	AppendSlice([]T, ...T) []T
 	Reset()
 	Release()
@@ -52,14 +55,28 @@ func (s *safeArena[T]) New() (t *T) {
 	return nuke.New[T](s.a.get())
 }
 
-func (s *safeArena[T]) NewValue(value T) (t *T) {
+func (s *safeArena[T]) NativeNew() (t *T) {
+	return new(T)
+}
+
+func (s *safeArena[T]) NewValue(newFunc func(*T)) (t *T) {
 	t = nuke.New[T](s.a.get())
-	*t = value
+	newFunc(t)
+	return
+}
+
+func (s *safeArena[T]) NativeNewValue(newFunc func(*T)) (t *T) {
+	t = new(T)
+	newFunc(t)
 	return
 }
 
 func (s *safeArena[T]) MakeSlice(size int, capacity int) (t []T) {
 	return nuke.MakeSlice[T](s.a.get(), size, capacity)
+}
+
+func (s *safeArena[T]) NativeMakeSlice(size int, capacity int) (t []T) {
+	return make([]T, size, capacity)
 }
 
 func (s *safeArena[T]) AppendSlice(o []T, v ...T) (t []T) {

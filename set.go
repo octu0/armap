@@ -40,7 +40,8 @@ func (s *Set[K]) Release() {
 }
 
 func NewSet[K comparable](arena Arena, funcs ...OptionFunc) *Set[K] {
-	return &Set[K]{
-		m: NewMap[K, setValue](arena, funcs...),
-	}
+	a := NewTypeArena[Set[K]](arena)
+	return a.NativeNewValue(func(s *Set[K]) {
+		s.m = NewMap[K, setValue](arena, funcs...)
+	})
 }

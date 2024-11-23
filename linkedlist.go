@@ -13,9 +13,7 @@ type nodePool[K comparable, V any] struct {
 
 func (p *nodePool[K, V]) Get(newFunc func(*node[K, V])) *node[K, V] {
 	if len(p.pool) < 1 {
-		n := p.ta.New()
-		newFunc(n)
-		return n
+		return p.ta.NewValue(newFunc)
 	}
 	n := p.pool[0]
 	p.pool = p.pool[1:]
@@ -36,7 +34,7 @@ func newNodePool[K comparable, V any](arena Arena) *nodePool[K, V] {
 	// no uses arena space
 	return &nodePool[K, V]{
 		ta:   NewTypeArena[node[K, V]](arena),
-		pool: make([]*node[K, V], 0),
+		pool: make([]*node[K, V], 0, 64),
 	}
 }
 
@@ -166,8 +164,8 @@ func NewLinkedList[K comparable, V any](arena Arena) *LinkedList[K, V] {
 
 func NewLinkedListWithPool[K comparable, V any](arena Arena, pool *nodePool[K, V]) *LinkedList[K, V] {
 	a := NewTypeArena[LinkedList[K, V]](arena)
-	return a.NewValue(LinkedList[K, V]{
-		arena: arena,
-		pool:  pool,
+	return a.NativeNewValue(func(l *LinkedList[K, V]) {
+		l.arena = arena
+		l.pool = pool
 	})
 }
