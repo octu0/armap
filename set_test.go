@@ -8,7 +8,7 @@ import (
 func TestSet(t *testing.T) {
 	t.Run("10000", func(tt *testing.T) {
 		N := 10_000
-		a := NewArena(1024*1024, 4)
+		a := NewArena(1024*1024, 30)
 		m := NewSet[string](a, WithCapacity(N))
 		defer m.Release()
 
@@ -22,6 +22,7 @@ func TestSet(t *testing.T) {
 				tt.Errorf("key %s is new key", k)
 			}
 		}
+
 		for _, k := range keys {
 			if ok := m.Contains(k); ok != true {
 				tt.Errorf("key %s is already Set", k)

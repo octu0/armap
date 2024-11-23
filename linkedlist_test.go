@@ -60,11 +60,11 @@ func TestLinkedList(t *testing.T) {
 		l.Push("test2", "t2")
 		l.Push("test3", "t3")
 
-		tt.Logf("dump keys %v", l.dumpKeys())
+		tt.Logf("dump keys %v", l.keys())
 
 		l.Delete("test1")
 
-		tt.Logf("dump keys %v", l.dumpKeys())
+		tt.Logf("dump keys %v", l.keys())
 
 		keys := make([]string, 0)
 		l.Scan(func(key string, value string) bool {

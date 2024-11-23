@@ -78,6 +78,21 @@ func (l *LinkedList[K, V]) Delete(key K) (old V, found bool) {
 	return
 }
 
+func (l *LinkedList[K, V]) DeleteAll() {
+	for _, k := range l.keys() {
+		_, _ = l.Delete(k)
+	}
+}
+
+func (l *LinkedList[K, V]) keys() []K {
+	keys := make([]K, 0, l.size) // no uses arena space
+	l.Scan(func(key K, _ V) bool {
+		keys = append(keys, key)
+		return true
+	})
+	return keys
+}
+
 func (l *LinkedList[K, V]) Scan(iter func(K, V) bool) {
 	curr := l.head
 	for {
@@ -89,15 +104,6 @@ func (l *LinkedList[K, V]) Scan(iter func(K, V) bool) {
 		}
 		curr = curr.next
 	}
-}
-
-func (l *LinkedList[K, V]) dumpKeys() []K {
-	keys := make([]K, 0, l.size)
-	l.Scan(func(k K, _ V) bool {
-		keys = append(keys, k)
-		return true
-	})
-	return keys
 }
 
 func (l *LinkedList[K, V]) Clear() {
