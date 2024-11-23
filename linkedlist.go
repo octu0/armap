@@ -159,10 +159,10 @@ func (l *LinkedList[K, V]) Release() {
 }
 
 func NewLinkedList[K comparable, V any](arena Arena) *LinkedList[K, V] {
-	return NewLinkedListWithPool(arena, newNodePool[K, V](arena))
+	return newLinkedListWithPool(arena, newNodePool[K, V](arena))
 }
 
-func NewLinkedListWithPool[K comparable, V any](arena Arena, pool *nodePool[K, V]) *LinkedList[K, V] {
+func newLinkedListWithPool[K comparable, V any](arena Arena, pool *nodePool[K, V]) *LinkedList[K, V] {
 	a := NewTypeArena[LinkedList[K, V]](arena)
 	return a.NewValue(func(l *LinkedList[K, V]) {
 		l.arena = arena
