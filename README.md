@@ -50,6 +50,28 @@ func main() {
 }
 ```
 
+## GC Benchmark
+
+average GC time improved by ~200x.
+
+```
+$ go test -run=BenchmarkGC -bench=BenchmarkGC -benchtime=3x -v .
+goos: darwin
+goarch: amd64
+pkg: github.com/octu0/armap
+cpu: Intel(R) Core(TM) i7-8569U CPU @ 2.80GHz
+BenchmarkGCSet
+BenchmarkGCSet/golangmap
+    armap_benchmark_test.go:92: min/avg/max/median = 59.526209ms/83.101306ms/270.682439ms/60.953085ms
+    armap_benchmark_test.go:92: min/avg/max/median = 59.485567ms/67.009433ms/125.832941ms/59.875661ms
+BenchmarkGCSet/golangmap-8         	       3	 223366544 ns/op
+BenchmarkGCSet/armap
+    armap_benchmark_test.go:117: min/avg/max/median = 216.152µs/377.403µs/507.442µs/377.907µs
+    armap_benchmark_test.go:117: min/avg/max/median = 291.639µs/354.231µs/576.287µs/314.844µs
+BenchmarkGCSet/armap-8             	       3	1353591775 ns/op
+PASS
+```
+
 # License
 
 MIT, see LICENSE file for details.
