@@ -21,6 +21,6 @@ func WithLoadFactor(rate float64) OptionFunc {
 func newOption() *option {
 	return &option{
 		capacity:   64,
-		loadFactor: 0.85,
+		loadFactor: 0.95,
 	}
 }

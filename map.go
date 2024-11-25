@@ -2,6 +2,7 @@ package armap
 
 import (
 	"fmt"
+	"runtime"
 	"strings"
 
 	"github.com/dolthub/maphash"
@@ -187,6 +188,7 @@ func (m *Map[K, V]) Clear() {
 
 func (m *Map[K, V]) Release() {
 	m.arena.release()
+	runtime.KeepAlive(m.arena)
 }
 
 func (m *Map[K, V]) dump() string {

@@ -102,6 +102,7 @@ func BenchmarkGCSet(b *testing.B) {
 			runtime.GC()
 			elapse[i] = time.Since(start)
 		}
+		m.Release()
 		runtime.KeepAlive(m)
 		tb.StopTimer()
 

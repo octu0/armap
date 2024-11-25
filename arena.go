@@ -1,6 +1,8 @@
 package armap
 
 import (
+	"runtime"
+
 	"github.com/ortuman/nuke"
 )
 
@@ -20,10 +22,12 @@ func (w *wrapArena) get() nuke.Arena {
 
 func (w *wrapArena) reset() {
 	w.ar.Reset(false)
+	runtime.KeepAlive(w.ar)
 }
 
 func (w *wrapArena) release() {
 	w.ar.Reset(true)
+	runtime.KeepAlive(w.ar)
 }
 
 func NewArena(bufferSize, bufferCount int) Arena {
@@ -84,13 +88,15 @@ func (s *safeArena[T]) AppendSlice(o []T, v ...T) (t []T) {
 }
 
 func (s *safeArena[T]) Reset() {
-	s.a.get().Reset(false)
+	s.a.reset()
+	runtime.KeepAlive(s)
 }
 
 func (s *safeArena[T]) Release() {
-	s.a.get().Reset(true)
+	s.a.release()
+	runtime.KeepAlive(s.a)
 }
 
 func NewTypeArena[T any](a Arena) TypeArena[T] {
-	return &safeArena[T]{a}
+	return &safeArena[T]{a: a}
 }
