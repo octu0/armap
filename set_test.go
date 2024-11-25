@@ -9,8 +9,8 @@ func TestSet(t *testing.T) {
 	t.Run("10000", func(tt *testing.T) {
 		N := 10_000
 		a := NewArena(1024*1024, 4)
+		defer a.Release()
 		m := NewSet[string](a, WithCapacity(N))
-		defer m.Release()
 
 		keys := make([]string, N)
 		for i := 0; i < N; i += 1 {
@@ -41,8 +41,8 @@ func TestSet(t *testing.T) {
 	})
 	t.Run("string", func(tt *testing.T) {
 		a := NewArena(1000, 10)
+		defer a.Release()
 		s := NewSet[string](a)
-		defer s.Release()
 
 		if ok := s.Add("test1"); ok {
 			tt.Errorf("test1 is new key")

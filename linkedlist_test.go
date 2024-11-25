@@ -8,8 +8,8 @@ import (
 func TestLinkedList(t *testing.T) {
 	t.Run("string,string", func(tt *testing.T) {
 		a := NewArena(1000, 10)
+		defer a.Release()
 		l := NewLinkedList[string, string](a)
-		defer l.Release()
 
 		l.Push("hello", "world")
 		l.Push("foo", "bar")
@@ -53,8 +53,8 @@ func TestLinkedList(t *testing.T) {
 	})
 	t.Run("push/delete/scan", func(tt *testing.T) {
 		a := NewArena(1000, 10)
+		defer a.Release()
 		l := NewLinkedList[string, string](a)
-		defer l.Release()
 
 		l.Push("test1", "t1")
 		l.Push("test2", "t2")

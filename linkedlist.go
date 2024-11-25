@@ -1,9 +1,5 @@
 package armap
 
-import (
-	"runtime"
-)
-
 type node[K comparable, V any] struct {
 	next  *node[K, V]
 	key   K
@@ -155,13 +151,6 @@ func (l *LinkedList[K, V]) Scan(iter func(K, V) bool) {
 func (l *LinkedList[K, V]) Clear() {
 	l.head = nil
 	l.size = 0
-	l.arena.reset()
-	runtime.KeepAlive(l.arena)
-}
-
-func (l *LinkedList[K, V]) Release() {
-	l.arena.release()
-	runtime.KeepAlive(l.arena)
 }
 
 func NewLinkedList[K comparable, V any](arena Arena) *LinkedList[K, V] {

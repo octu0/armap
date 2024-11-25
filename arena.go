@@ -8,8 +8,9 @@ import (
 
 type Arena interface {
 	get() nuke.Arena
-	reset()
-	release()
+
+	Reset()
+	Release()
 }
 
 type wrapArena struct {
@@ -21,7 +22,7 @@ func (w *wrapArena) get() nuke.Arena {
 	return w.ar
 }
 
-func (w *wrapArena) reset() {
+func (w *wrapArena) Reset() {
 	defer func() {
 		if rcv := recover(); rcv != nil {
 			// [workaround] invalid memory address or nil pointer dereference
@@ -32,7 +33,7 @@ func (w *wrapArena) reset() {
 	runtime.KeepAlive(w.ar)
 }
 
-func (w *wrapArena) release() {
+func (w *wrapArena) Release() {
 	defer func() {
 		if rcv := recover(); rcv != nil {
 			// [workaround] invalid memory address or nil pointer dereference
@@ -101,12 +102,12 @@ func (s *safeArena[T]) AppendSlice(o []T, v ...T) (t []T) {
 }
 
 func (s *safeArena[T]) Reset() {
-	s.arena.reset()
+	s.arena.Reset()
 	runtime.KeepAlive(s.arena)
 }
 
 func (s *safeArena[T]) Release() {
-	s.arena.release()
+	s.arena.Release()
 	runtime.KeepAlive(s.arena)
 }
 

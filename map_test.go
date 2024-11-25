@@ -9,8 +9,8 @@ func TestMap(t *testing.T) {
 	t.Run("1000", func(tt *testing.T) {
 		N := 10
 		a := NewArena(1024*1024, 4)
+		defer a.Release()
 		m := NewMap[string, string](a, WithCapacity(N))
-		defer m.Release()
 
 		keys := make([]string, N)
 		for i := 0; i < N; i += 1 {
@@ -65,8 +65,8 @@ func TestMap(t *testing.T) {
 		value3 := key3 + ".value"
 
 		a := NewArena(1000, 10)
+		defer a.Release()
 		m := NewMap[string, string](a)
-		defer m.Release()
 
 		old1, found1 := m.Set(key1, value1)
 		if found1 {
