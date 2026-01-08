@@ -7,16 +7,24 @@ type node[K comparable, V any] struct {
 }
 
 type nodePool[K comparable, V any] struct {
-	ta   TypeArena[node[K, V]]
-	pool []*node[K, V]
+	ta    TypeArena[node[K, V]]
+	pool  []*node[K, V]
+	chunk []node[K, V]
 }
 
 func (p *nodePool[K, V]) Get(newFunc func(*node[K, V])) *node[K, V] {
-	if len(p.pool) < 1 {
-		return p.ta.NewValue(newFunc)
+	if 0 < len(p.pool) {
+		n := p.pool[0]
+		p.pool = p.pool[1:]
+		newFunc(n)
+		return n
 	}
-	n := p.pool[0]
-	p.pool = p.pool[1:]
+
+	if len(p.chunk) == 0 {
+		p.chunk = make([]node[K, V], 4096)
+	}
+	n := &p.chunk[0]
+	p.chunk = p.chunk[1:]
 	newFunc(n)
 	return n
 }
@@ -33,8 +41,9 @@ func (p *nodePool[K, V]) Put(n *node[K, V]) {
 func newNodePool[K comparable, V any](arena Arena) *nodePool[K, V] {
 	// no uses arena space
 	return &nodePool[K, V]{
-		ta:   NewTypeArena[node[K, V]](arena),
-		pool: make([]*node[K, V], 0, 64),
+		ta:    NewTypeArena[node[K, V]](arena),
+		pool:  make([]*node[K, V], 0, 64),
+		chunk: nil,
 	}
 }
 
@@ -58,18 +67,27 @@ func (l *LinkedList[K, V]) Push(key K, value V) (old V, found bool) {
 		if curr.key == key {
 			old = curr.value
 			found = true
-			curr.value = value
+			curr.value = Clone(l.arena, value)
 			return
 		}
 		curr = curr.next
 	}
 	l.head = l.pool.Get(func(n *node[K, V]) {
 		n.next = l.head
+		n.key = Clone(l.arena, key)
+		n.value = Clone(l.arena, value)
+	})
+	l.size += 1
+	return
+}
+
+func (l *LinkedList[K, V]) Swap(key K, value V) {
+	l.head = l.pool.Get(func(n *node[K, V]) {
+		n.next = l.head
 		n.key = key
 		n.value = value
 	})
 	l.size += 1
-	return
 }
 
 func (l *LinkedList[K, V]) Get(key K) (old V, found bool) {
@@ -158,9 +176,8 @@ func NewLinkedList[K comparable, V any](arena Arena) *LinkedList[K, V] {
 }
 
 func newLinkedListWithPool[K comparable, V any](arena Arena, pool *nodePool[K, V]) *LinkedList[K, V] {
-	a := NewTypeArena[LinkedList[K, V]](arena)
-	return a.NewValue(func(l *LinkedList[K, V]) {
-		l.arena = arena
-		l.pool = pool
-	})
+	return &LinkedList[K, V]{
+		arena: arena,
+		pool:  pool,
+	}
 }

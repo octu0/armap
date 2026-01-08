@@ -1,9 +1,9 @@
 package armap
 
 import (
-	"runtime"
+	"unsafe"
 
-	"github.com/pavanmanishd/arena"
+	"github.com/alecthomas/arena"
 )
 
 type Arena interface {
@@ -11,6 +11,13 @@ type Arena interface {
 
 	Reset()
 	Release()
+}
+
+func Clone[T any](a Arena, v T) T {
+	if unsafe.Sizeof(v) == 0 {
+		return v
+	}
+	return *arena.Clone(a.get(), v)
 }
 
 type wrapArena struct {
@@ -24,16 +31,15 @@ func (w *wrapArena) get() *arena.Arena {
 
 func (w *wrapArena) Reset() {
 	w.ar.Reset()
-	runtime.KeepAlive(w.ar)
 }
 
 func (w *wrapArena) Release() {
-	w.ar.Release()
-	runtime.KeepAlive(w.ar)
+	// alecthomas/arena does not have explicit Release,
+	// but we can at least Reset to reuse or just let it be.
 }
 
 func NewArena(bufferSize int) Arena {
-	ar := arena.NewArena(bufferSize)
+	ar := arena.Create(bufferSize)
 	return &wrapArena{ar, bufferSize}
 }
 
@@ -55,36 +61,21 @@ type typedArena[T any] struct {
 }
 
 func (s *typedArena[T]) New() (t *T) {
-	return arena.Alloc[T](s.arena.get())
+	return arena.New[T](s.arena.get())
 }
 
 func (s *typedArena[T]) NewValue(newFunc func(*T)) (t *T) {
-	t = arena.Alloc[T](s.arena.get())
+	t = arena.New[T](s.arena.get())
 	newFunc(t)
 	return
 }
 
 func (s *typedArena[T]) MakeSlice(capacity int) []T {
-	slice := arena.AllocSliceZeroed[T](s.arena.get(), capacity)
-	return slice
+	return arena.Make[T](s.arena.get(), capacity, capacity)
 }
 
 func (s *typedArena[T]) AppendSlice(o []T, v ...T) []T {
-	if len(o)+len(v) <= cap(o) {
-		return append(o, v...)
-	}
-	return s.growSlice(o, v)
-}
-
-func (s *typedArena[T]) growSlice(o []T, v []T) []T {
-	capacity := cap(o)
-	newSize := len(o) + len(v)
-	newCapacity := ((newSize / capacity) + 1) * capacity
-
-	slice := arena.AllocSliceZeroed[T](s.arena.get(), newCapacity)
-	copy(slice[0:], o)
-	copy(slice[len(o):], v)
-	return slice[:newSize]
+	return arena.Append[T](s.arena.get(), o, v...)
 }
 
 func (s *typedArena[T]) Reset() {

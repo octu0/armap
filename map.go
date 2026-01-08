@@ -25,8 +25,7 @@ func (m *monotonicBuckets[K, V]) Get(index int) *LinkedList[K, V] {
 }
 
 func (m *monotonicBuckets[K, V]) Grow() {
-	ba := NewTypeArena[LinkedList[K, V]](m.arena)
-	s := ba.MakeSlice(m.stride, m.stride)
+	s := make([]LinkedList[K, V], m.stride)
 	for i := 0; i < m.stride; i += 1 {
 		s[i].arena = m.arena
 		s[i].pool = m.pool
@@ -118,21 +117,16 @@ func (m *Map[K, V]) currentRate() float64 {
 }
 
 func (m *Map[K, V]) resize() {
-	m.buckets.Grow()
-	oldCapacity := m.capacity
-	newCapacity := m.buckets.Cap()
-	m.buckets.ScanKeysLimit(func(oldIndex int, keys []K) bool {
-		for _, key := range keys {
-			newIndex := m.indexFrom(newCapacity, key)
-			if oldIndex != newIndex {
-				// reindex
-				if value, ok := m.buckets.Get(oldIndex).Delete(key); ok {
-					m.buckets.Get(newIndex).Push(key, value)
-				}
-			}
-		}
+	newCapacity := m.capacity * 2
+	newBuckets := newMonotonicBuckets[K, V](m.arena, m.buckets.pool, newCapacity)
+
+	m.buckets.Scan(func(key K, value V) bool {
+		i := m.indexFrom(newCapacity, key)
+		newBuckets.Get(i).Swap(key, value)
 		return true
-	}, oldCapacity)
+	})
+
+	m.buckets = newBuckets
 	m.capacity = newCapacity
 }
 
@@ -194,14 +188,14 @@ func NewMap[K comparable, V any](arena Arena, funcs ...OptionFunc) *Map[K, V] {
 		fn(opt)
 	}
 
-	a := NewTypeArena[Map[K, V]](arena)
 	pool := newNodePool[K, V](arena)
-	return a.NewValue(func(m *Map[K, V]) {
-		m.arena = arena
-		m.hasher = maphash.NewHasher[K]()
-		m.buckets = newMonotonicBuckets[K, V](arena, pool, opt.capacity)
-		m.size = 0
-		m.capacity = opt.capacity
-		m.loadFactor = opt.loadFactor
-	})
+	m := &Map[K, V]{
+		arena:      arena,
+		hasher:     maphash.NewHasher[K](),
+		buckets:    newMonotonicBuckets[K, V](arena, pool, opt.capacity),
+		size:       0,
+		capacity:   opt.capacity,
+		loadFactor: opt.loadFactor,
+	}
+	return m
 }
