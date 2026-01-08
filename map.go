@@ -19,7 +19,7 @@ type bucket[K comparable, V any] struct {
 	state bucketState
 }
 
-type OpenMap[K comparable, V any] struct {
+type Map[K comparable, V any] struct {
 	arena      Arena
 	hasher     maphash.Hasher[K]
 	buckets    []byte // Unsafe storage to skip GC scanning
@@ -29,20 +29,20 @@ type OpenMap[K comparable, V any] struct {
 	loadFactor float64
 }
 
-func (m *OpenMap[K, V]) getBucket(idx int) *bucket[K, V] {
+func (m *Map[K, V]) getBucket(idx int) *bucket[K, V] {
 	offset := uintptr(idx) * m.bucketSize
 	return (*bucket[K, V])(unsafe.Pointer(&m.buckets[offset]))
 }
 
-func (m *OpenMap[K, V]) Len() int {
+func (m *Map[K, V]) Len() int {
 	return m.count
 }
 
-func (m *OpenMap[K, V]) index(key K) int {
+func (m *Map[K, V]) index(key K) int {
 	return int(m.hasher.Hash(key)) & (m.capacity - 1)
 }
 
-func (m *OpenMap[K, V]) Set(key K, value V) (old V, found bool) {
+func (m *Map[K, V]) Set(key K, value V) (old V, found bool) {
 	if float64(m.count)/float64(m.capacity) > m.loadFactor {
 		m.resize(m.capacity * 2)
 	}
@@ -50,21 +50,23 @@ func (m *OpenMap[K, V]) Set(key K, value V) (old V, found bool) {
 	idx := m.index(key)
 	startIdx := idx
 
+	ka := NewTypeArena[K](m.arena)
+	va := NewTypeArena[V](m.arena)
 	for {
 		b := m.getBucket(idx)
 		if b.state == stateEmpty {
 			// Found empty slot, insert new
-			b.key = Clone(m.arena, key)
-			b.value = Clone(m.arena, value)
+			b.key = ka.Clone(key)
+			b.value = va.Clone(value)
 			b.state = stateUsed
-			m.count++
+			m.count += 1
 			return
 		}
 		if b.state == stateUsed && b.key == key {
 			// Update existing
 			old = b.value
 			found = true
-			b.value = Clone(m.arena, value)
+			b.value = va.Clone(value)
 			return
 		}
 
@@ -77,7 +79,7 @@ func (m *OpenMap[K, V]) Set(key K, value V) (old V, found bool) {
 	}
 }
 
-func (m *OpenMap[K, V]) Get(key K) (val V, found bool) {
+func (m *Map[K, V]) Get(key K) (val V, found bool) {
 	if m.capacity == 0 {
 		return
 	}
@@ -99,7 +101,21 @@ func (m *OpenMap[K, V]) Get(key K) (val V, found bool) {
 	}
 }
 
-func (m *OpenMap[K, V]) Delete(key K) (old V, found bool) {
+func (m *Map[K, V]) Scan(iter func(K, V) bool) {
+	if m.capacity == 0 {
+		return
+	}
+	for i := 0; i < m.capacity; i += 1 {
+		b := m.getBucket(i)
+		if b.state == stateUsed {
+			if iter(b.key, b.value) != true {
+				return
+			}
+		}
+	}
+}
+
+func (m *Map[K, V]) Delete(key K) (old V, found bool) {
 	if m.capacity == 0 {
 		return
 	}
@@ -114,7 +130,7 @@ func (m *OpenMap[K, V]) Delete(key K) (old V, found bool) {
 		if b.state == stateUsed && b.key == key {
 			old = b.value
 			found = true
-			m.count--
+			m.count -= 1
 			m.shiftBack(idx)
 			return
 		}
@@ -125,7 +141,7 @@ func (m *OpenMap[K, V]) Delete(key K) (old V, found bool) {
 	}
 }
 
-func (m *OpenMap[K, V]) shiftBack(idx int) {
+func (m *Map[K, V]) shiftBack(idx int) {
 	// Linear probing backward shift deletion
 	curr := idx
 	for {
@@ -265,7 +281,7 @@ func (m *OpenMap[K, V]) shiftBack(idx int) {
 	}
 }
 
-func (m *OpenMap[K, V]) resize(newCapacity int) {
+func (m *Map[K, V]) resize(newCapacity int) {
 	oldBuckets := m.buckets
 	oldCapacity := m.capacity // Save old capacity before updating
 
@@ -278,11 +294,10 @@ func (m *OpenMap[K, V]) resize(newCapacity int) {
 	m.buckets = make([]byte, totalSize)
 
 	m.count = 0
-	// m.tombstones = 0 // Removed
 
-	if oldCapacity > 0 {
-		oldBucketSize := m.bucketSize // Same size
-		for i := 0; i < oldCapacity; i++ {
+	if 0 < oldCapacity {
+		oldBucketSize := m.bucketSize
+		for i := 0; i < oldCapacity; i += 1 {
 			offset := uintptr(i) * oldBucketSize
 			b := (*bucket[K, V])(unsafe.Pointer(&oldBuckets[offset]))
 			if b.state == stateUsed {
@@ -292,7 +307,7 @@ func (m *OpenMap[K, V]) resize(newCapacity int) {
 	}
 }
 
-func (m *OpenMap[K, V]) insertRaw(key K, value V) {
+func (m *Map[K, V]) insertRaw(key K, value V) {
 	idx := m.index(key)
 	for {
 		b := m.getBucket(idx)
@@ -300,14 +315,14 @@ func (m *OpenMap[K, V]) insertRaw(key K, value V) {
 			b.key = key
 			b.value = value
 			b.state = stateUsed
-			m.count++
+			m.count += 1
 			return
 		}
 		idx = (idx + 1) & (m.capacity - 1)
 	}
 }
 
-func (m *OpenMap[K, V]) Clear() {
+func (m *Map[K, V]) Clear() {
 	var b bucket[K, V]
 	m.bucketSize = unsafe.Sizeof(b)
 	totalSize := uintptr(m.capacity) * m.bucketSize
@@ -315,24 +330,23 @@ func (m *OpenMap[K, V]) Clear() {
 	m.count = 0
 }
 
-func NewOpenMap[K comparable, V any](arena Arena, funcs ...OptionFunc) *OpenMap[K, V] {
+func NewMap[K comparable, V any](arena Arena, funcs ...OptionFunc) *Map[K, V] {
 	opt := newOption()
 	for _, fn := range funcs {
 		fn(opt)
 	}
 
-	cap := 1
-	for cap < opt.capacity {
-		cap *= 2
+	capacity := 1
+	for capacity < opt.capacity {
+		capacity *= 2
 	}
 
-	m := &OpenMap[K, V]{
+	m := &Map[K, V]{
 		arena:      arena,
 		hasher:     maphash.NewHasher[K](),
 		capacity:   0, // Initialize to 0 so resize treats it as fresh
 		loadFactor: opt.loadFactor,
 	}
-	// Initial allocation
-	m.resize(cap)
+	m.resize(capacity)
 	return m
 }

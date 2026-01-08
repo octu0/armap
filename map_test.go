@@ -6,12 +6,12 @@ import (
 	"testing"
 )
 
-func TestOpenMap(t *testing.T) {
+func TestMap(t *testing.T) {
 	t.Run("1000", func(tt *testing.T) {
 		N := 10
 		a := NewArena(1024 * 1024)
 		defer a.Release()
-		m := NewOpenMap[string, string](a, WithCapacity(N))
+		m := NewMap[string, string](a, WithCapacity(N))
 
 		keys := make([]string, N)
 		for i := 0; i < N; i += 1 {
@@ -20,37 +20,33 @@ func TestOpenMap(t *testing.T) {
 
 		for _, k := range keys {
 			if _, ok := m.Set(k, k); ok {
-				t.Errorf("key %s is new key", k)
+				tt.Errorf("key %s is new key", k)
 			}
 		}
 
-		// tt.Logf("dump keys \n%s", m.dump())
-
 		for _, k := range keys {
 			if v, ok := m.Get(k); ok != true {
-				t.Errorf("key %s is already set", k)
+				tt.Errorf("key %s is already set", k)
 			} else {
 				if v != k {
-					t.Errorf("value %s is %s", v, k)
+					tt.Errorf("value %s is %s", v, k)
 				}
 			}
 		}
 
 		for _, k := range keys {
 			if v, ok := m.Delete(k); ok != true {
-				t.Errorf("key %s exists", k)
+				tt.Errorf("key %s exists", k)
 			} else {
 				if v != k {
-					t.Errorf("value %s is %s", v, k)
+					tt.Errorf("value %s is %s", v, k)
 				}
 			}
 		}
 
-		// tt.Logf("dump keys \n%s", m.dump())
-
 		for _, k := range keys {
 			if _, ok := m.Get(k); ok {
-				t.Errorf("key %s is deleted", k)
+				tt.Errorf("key %s is deleted", k)
 			}
 		}
 	})
@@ -67,44 +63,44 @@ func TestOpenMap(t *testing.T) {
 
 		a := NewArena(1000)
 		defer a.Release()
-		m := NewOpenMap[string, string](a)
+		m := NewMap[string, string](a)
 
 		old1, found1 := m.Set(key1, value1)
 		if found1 {
-			t.Errorf("key1 is not exists: %s", old1)
+			tt.Errorf("key1 is not exists: %s", old1)
 		}
 
 		old2, found2 := m.Set(key2, value2)
 		if found2 {
-			t.Errorf("key2 is not exists: %s", old2)
+			tt.Errorf("key2 is not exists: %s", old2)
 		}
 
 		old3, found3 := m.Set(key3, value3)
 		if found3 {
-			t.Errorf("key3 is not exists: %s", old3)
+			tt.Errorf("key3 is not exists: %s", old3)
 		}
 
 		if v, ok := m.Get(key1); ok != true {
-			t.Errorf("key1 exists")
+			tt.Errorf("key1 exists")
 		} else {
 			if v != value1 {
-				t.Errorf("key1 value = %s (expect %s)", v, value1)
+				tt.Errorf("key1 value = %s (expect %s)", v, value1)
 			}
 		}
 
 		if v, ok := m.Get(key2); ok != true {
-			t.Errorf("key2 exists")
+			tt.Errorf("key2 exists")
 		} else {
 			if v != value2 {
-				t.Errorf("key2 value = %s (expect %s)", v, value2)
+				tt.Errorf("key2 value = %s (expect %s)", v, value2)
 			}
 		}
 
 		if v, ok := m.Get(key3); ok != true {
-			t.Errorf("key3 exists")
+			tt.Errorf("key3 exists")
 		} else {
 			if v != value3 {
-				t.Errorf("key3 value = %s (expect %s)", v, value3)
+				tt.Errorf("key3 value = %s (expect %s)", v, value3)
 			}
 		}
 
@@ -112,38 +108,38 @@ func TestOpenMap(t *testing.T) {
 
 		newValue1 := "foo"
 		if old1, found1 := m.Set(key1, newValue1); found1 != true {
-			t.Errorf("key1 is updated")
+			tt.Errorf("key1 is updated")
 		} else {
 			if old1 != value1 {
-				t.Errorf("get old value: %s (expect %s)", old1, value1)
+				tt.Errorf("get old value: %s (expect %s)", old1, value1)
 			}
 		}
 
 		// delete key
 
 		if old1, found1 := m.Delete(key1); found1 != true {
-			t.Errorf("key1 is exists")
+			tt.Errorf("key1 is exists")
 		} else {
 			if old1 != newValue1 {
-				t.Errorf("get old value: %s (expect %s)", old1, newValue1)
+				tt.Errorf("get old value: %s (expect %s)", old1, newValue1)
 			}
 		}
 
 		// other key check
 
 		if v, ok := m.Get(key2); ok != true {
-			t.Errorf("key2 exists")
+			tt.Errorf("key2 exists")
 		} else {
 			if v != value2 {
-				t.Errorf("key2 value = %s (expect %s)", v, value2)
+				tt.Errorf("key2 value = %s (expect %s)", v, value2)
 			}
 		}
 
 		if v, ok := m.Get(key3); ok != true {
-			t.Errorf("key3 exists")
+			tt.Errorf("key3 exists")
 		} else {
 			if v != value3 {
-				t.Errorf("key3 value = %s (expect %s)", v, value3)
+				tt.Errorf("key3 value = %s (expect %s)", v, value3)
 			}
 		}
 	})
@@ -152,11 +148,52 @@ func TestOpenMap(t *testing.T) {
 		a := NewArena(1024 * 1024 * 64)
 		defer a.Release()
 
-		m := NewOpenMap[string, int](a, WithCapacity(64))
-		for i := 0; i < 100000; i += 1 {
+		m := NewMap[string, int](a, WithCapacity(64))
+		for i := 0; i < 500_000; i += 1 {
 			m.Set(fmt.Sprintf("large-key-%10d", i), i)
 		}
 
 		t.Logf("no panic = ok")
+	})
+
+	t.Run("Scan", func(tt *testing.T) {
+		a := NewArena(1024)
+		defer a.Release()
+		m := NewMap[string, int](a)
+
+		expected := map[string]int{
+			"a": 1,
+			"b": 2,
+			"c": 3,
+		}
+
+		for k, v := range expected {
+			m.Set(k, v)
+		}
+
+		actual := make(map[string]int)
+		m.Scan(func(k string, v int) bool {
+			actual[k] = v
+			return true
+		})
+
+		if len(actual) != len(expected) {
+			tt.Errorf("len(actual) = %d, len(expected) = %d", len(actual), len(expected))
+		}
+
+		for k, v := range expected {
+			if actual[k] != v {
+				tt.Errorf("actual[%s] = %d, expected[%s] = %d", k, actual[k], k, v)
+			}
+		}
+
+		count := 0
+		m.Scan(func(k string, v int) bool {
+			count += 1
+			return false
+		})
+		if count != 1 {
+			tt.Errorf("count = %d, expected 1", count)
+		}
 	})
 }

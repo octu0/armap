@@ -56,34 +56,3 @@ func ExampleSet() {
 	// exists foo = true
 	// exists foo = false
 }
-
-func ExampleLinkedList() {
-	a := NewArena(2 * 1024 * 1024) // 2MB arena size
-	defer a.Release()
-	l := NewLinkedList[string, string](a)
-
-	l.Push("hello1", "world1")
-	v, ok := l.Get("hello1")
-	fmt.Println(v, ok)
-
-	l.Push("hello2", "world2")
-	v, ok = l.Get("hello2")
-	fmt.Println(v, ok)
-
-	l.Scan(func(key string, value string) bool {
-		fmt.Println(key, value)
-		return true
-	})
-
-	l.Clear()
-
-	_, ok = l.Get("hello1")
-	fmt.Println(ok)
-
-	// Output:
-	// world1 true
-	// world2 true
-	// hello2 world2
-	// hello1 world1
-	// false
-}

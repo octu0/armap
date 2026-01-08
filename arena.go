@@ -13,13 +13,6 @@ type Arena interface {
 	Release()
 }
 
-func Clone[T any](a Arena, v T) T {
-	if unsafe.Sizeof(v) == 0 {
-		return v
-	}
-	return *arena.Clone(a.get(), v)
-}
-
 type wrapArena struct {
 	ar         *arena.Arena
 	bufferSize int
@@ -34,8 +27,8 @@ func (w *wrapArena) Reset() {
 }
 
 func (w *wrapArena) Release() {
-	// alecthomas/arena does not have explicit Release,
-	// but we can at least Reset to reuse or just let it be.
+	w.ar = nil
+	w.ar = arena.Create(w.bufferSize)
 }
 
 func NewArena(bufferSize int) Arena {
@@ -46,8 +39,9 @@ func NewArena(bufferSize int) Arena {
 type TypeArena[T any] interface {
 	New() *T
 	NewValue(func(*T)) *T
-	MakeSlice(int) []T
+	MakeSlice(int, int) []T
 	AppendSlice([]T, ...T) []T
+	Clone(T) T
 	Reset()
 	Release()
 }
@@ -60,7 +54,7 @@ type typedArena[T any] struct {
 	arena Arena
 }
 
-func (s *typedArena[T]) New() (t *T) {
+func (s *typedArena[T]) New() *T {
 	return arena.New[T](s.arena.get())
 }
 
@@ -70,12 +64,19 @@ func (s *typedArena[T]) NewValue(newFunc func(*T)) (t *T) {
 	return
 }
 
-func (s *typedArena[T]) MakeSlice(capacity int) []T {
-	return arena.Make[T](s.arena.get(), capacity, capacity)
+func (s *typedArena[T]) MakeSlice(size, capacity int) []T {
+	return arena.Make[T](s.arena.get(), size, capacity)
 }
 
 func (s *typedArena[T]) AppendSlice(o []T, v ...T) []T {
 	return arena.Append[T](s.arena.get(), o, v...)
+}
+
+func (s *typedArena[T]) Clone(v T) T {
+	if unsafe.Sizeof(v) == 0 {
+		return v
+	}
+	return *arena.Clone(s.arena.get(), v)
 }
 
 func (s *typedArena[T]) Reset() {
