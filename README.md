@@ -5,7 +5,7 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/octu0/armap)](https://goreportcard.com/report/github.com/octu0/armap)
 [![Releases](https://img.shields.io/github/v/release/octu0/armap)](https://github.com/octu0/armap/releases)
 
-HashMap on [Arena](https://github.com/ortuman/nuke)
+Map on [Arena](https://github.com/alecthomas/arena)
 
 features:
 - [Generics](https://go.dev/doc/tutorial/generics) support
