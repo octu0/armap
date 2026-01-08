@@ -43,7 +43,7 @@ func (m *Map[K, V]) index(key K) int {
 }
 
 func (m *Map[K, V]) Set(key K, value V) (old V, found bool) {
-	if float64(m.count)/float64(m.capacity) > m.loadFactor {
+	if m.loadFactor < (float64(m.count) / float64(m.capacity)) {
 		m.resize(m.capacity * 2)
 	}
 
