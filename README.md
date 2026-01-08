@@ -31,7 +31,7 @@ import (
 )
 
 func main() {
-	a := armap.NewArena(1024*1024, 4) // 1MB buffer size * 4
+	a := armap.NewArena(4*1024*1024) // 4MB buffer size
 	defer a.Release() // release memory
 
 	m := armap.NewMap[string, string](a, armap.WithCapacity(1000))
