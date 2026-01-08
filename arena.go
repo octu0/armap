@@ -39,11 +39,8 @@ func NewArena(bufferSize int) Arena {
 
 type TypeArena[T any] interface {
 	New() *T
-	NativeNew() *T
 	NewValue(func(*T)) *T
-	NativeNewValue(func(*T)) *T
-	MakeSlice(int, int) []T
-	NativeMakeSlice(int, int) []T
+	MakeSlice(int) []T
 	AppendSlice([]T, ...T) []T
 	Reset()
 	Release()
@@ -61,29 +58,15 @@ func (s *typedArena[T]) New() (t *T) {
 	return arena.Alloc[T](s.arena.get())
 }
 
-func (s *typedArena[T]) NativeNew() (t *T) {
-	return new(T)
-}
-
 func (s *typedArena[T]) NewValue(newFunc func(*T)) (t *T) {
 	t = arena.Alloc[T](s.arena.get())
 	newFunc(t)
 	return
 }
 
-func (s *typedArena[T]) NativeNewValue(newFunc func(*T)) (t *T) {
-	t = new(T)
-	newFunc(t)
-	return
-}
-
-func (s *typedArena[T]) MakeSlice(size int, capacity int) []T {
+func (s *typedArena[T]) MakeSlice(capacity int) []T {
 	slice := arena.AllocSliceZeroed[T](s.arena.get(), capacity)
-	return slice[:size]
-}
-
-func (s *typedArena[T]) NativeMakeSlice(size int, capacity int) []T {
-	return make([]T, size, capacity)
+	return slice
 }
 
 func (s *typedArena[T]) AppendSlice(o []T, v ...T) []T {
@@ -96,10 +79,10 @@ func (s *typedArena[T]) AppendSlice(o []T, v ...T) []T {
 func (s *typedArena[T]) growSlice(o []T, v []T) []T {
 	capacity := cap(o)
 	newSize := len(o) + len(v)
-	newCapacity := ((newSize / capacity) + 1) * 2
+	newCapacity := ((newSize / capacity) + 1) * capacity
 
 	slice := arena.AllocSliceZeroed[T](s.arena.get(), newCapacity)
-	copy(slice, o)
+	copy(slice[0:], o)
 	copy(slice[len(o):], v)
 	return slice[:newSize]
 }
