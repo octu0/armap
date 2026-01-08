@@ -1,6 +1,7 @@
 package armap
 
 import (
+	"fmt"
 	"strconv"
 	"testing"
 )
@@ -145,5 +146,17 @@ func TestMap(t *testing.T) {
 				tt.Errorf("key3 value = %s (expect %s)", v, value3)
 			}
 		}
+	})
+
+	t.Run("too_large_size_small_cap", func(tt *testing.T) {
+		a := NewArena(1024*1024*64, 10)
+		defer a.Release()
+
+		m := NewMap[string, int](a, WithCapacity(64))
+		for i := 0; i < 100000; i += 1 {
+			m.Set(fmt.Sprintf("large-key-%10d", i), i)
+		}
+
+		tt.Logf("no panic = ok")
 	})
 }
