@@ -36,8 +36,7 @@ func (s *Set[K]) Clear() {
 }
 
 func NewSet[K comparable](arena Arena, funcs ...OptionFunc) *Set[K] {
-	a := NewTypeArena[Set[K]](arena)
-	return a.NewValue(func(s *Set[K]) {
-		s.m = NewMap[K, setValue](arena, funcs...)
-	})
+	return &Set[K]{
+		m: NewMap[K, setValue](arena, funcs...),
+	}
 }

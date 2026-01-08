@@ -8,7 +8,7 @@ import (
 func TestSet(t *testing.T) {
 	t.Run("10000", func(tt *testing.T) {
 		N := 10_000
-		a := NewArena(1024*1024, 4)
+		a := NewArena(1024 * 1024)
 		defer a.Release()
 		m := NewSet[string](a, WithCapacity(N))
 
@@ -40,7 +40,7 @@ func TestSet(t *testing.T) {
 		}
 	})
 	t.Run("string", func(tt *testing.T) {
-		a := NewArena(1000, 10)
+		a := NewArena(1000)
 		defer a.Release()
 		s := NewSet[string](a)
 

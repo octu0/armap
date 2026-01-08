@@ -1,6 +1,7 @@
 package armap
 
 import (
+	"fmt"
 	"strconv"
 	"testing"
 )
@@ -8,7 +9,7 @@ import (
 func TestMap(t *testing.T) {
 	t.Run("1000", func(tt *testing.T) {
 		N := 10
-		a := NewArena(1024*1024, 4)
+		a := NewArena(1024 * 1024)
 		defer a.Release()
 		m := NewMap[string, string](a, WithCapacity(N))
 
@@ -22,8 +23,6 @@ func TestMap(t *testing.T) {
 				tt.Errorf("key %s is new key", k)
 			}
 		}
-
-		tt.Logf("dump keys \n%s", m.dump())
 
 		for _, k := range keys {
 			if v, ok := m.Get(k); ok != true {
@@ -45,8 +44,6 @@ func TestMap(t *testing.T) {
 			}
 		}
 
-		tt.Logf("dump keys \n%s", m.dump())
-
 		for _, k := range keys {
 			if _, ok := m.Get(k); ok {
 				tt.Errorf("key %s is deleted", k)
@@ -64,7 +61,7 @@ func TestMap(t *testing.T) {
 		key3 := "key3"
 		value3 := key3 + ".value"
 
-		a := NewArena(1000, 10)
+		a := NewArena(1000)
 		defer a.Release()
 		m := NewMap[string, string](a)
 
@@ -144,6 +141,59 @@ func TestMap(t *testing.T) {
 			if v != value3 {
 				tt.Errorf("key3 value = %s (expect %s)", v, value3)
 			}
+		}
+	})
+
+	t.Run("too_large_size_small_cap", func(tt *testing.T) {
+		a := NewArena(1024 * 1024 * 64)
+		defer a.Release()
+
+		m := NewMap[string, int](a, WithCapacity(64))
+		for i := 0; i < 500_000; i += 1 {
+			m.Set(fmt.Sprintf("large-key-%10d", i), i)
+		}
+
+		t.Logf("no panic = ok")
+	})
+
+	t.Run("Scan", func(tt *testing.T) {
+		a := NewArena(1024)
+		defer a.Release()
+		m := NewMap[string, int](a)
+
+		expected := map[string]int{
+			"a": 1,
+			"b": 2,
+			"c": 3,
+		}
+
+		for k, v := range expected {
+			m.Set(k, v)
+		}
+
+		actual := make(map[string]int)
+		m.Scan(func(k string, v int) bool {
+			actual[k] = v
+			return true
+		})
+
+		if len(actual) != len(expected) {
+			tt.Errorf("len(actual) = %d, len(expected) = %d", len(actual), len(expected))
+		}
+
+		for k, v := range expected {
+			if actual[k] != v {
+				tt.Errorf("actual[%s] = %d, expected[%s] = %d", k, actual[k], k, v)
+			}
+		}
+
+		count := 0
+		m.Scan(func(k string, v int) bool {
+			count += 1
+			return false
+		})
+		if count != 1 {
+			tt.Errorf("count = %d, expected 1", count)
 		}
 	})
 }
