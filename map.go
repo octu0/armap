@@ -1,201 +1,338 @@
 package armap
 
 import (
-	"fmt"
-	"strings"
+	"unsafe"
 
 	"github.com/dolthub/maphash"
 )
 
-type monotonicBuckets[K comparable, V any] struct {
-	arena   Arena
-	pool    *nodePool[K, V]
-	buckets [][]LinkedList[K, V]
-	stride  int
+type bucketState byte
+
+const (
+	stateEmpty bucketState = 0
+	stateUsed  bucketState = 1
+)
+
+type bucket[K comparable, V any] struct {
+	key   K
+	value V
+	state bucketState
 }
 
-func (m *monotonicBuckets[K, V]) Cap() int {
-	return len(m.buckets) * m.stride
-}
-
-func (m *monotonicBuckets[K, V]) Get(index int) *LinkedList[K, V] {
-	y := index / m.stride
-	x := index - (y * m.stride)
-	return &m.buckets[y][x]
-}
-
-func (m *monotonicBuckets[K, V]) Grow() {
-	s := make([]LinkedList[K, V], m.stride)
-	for i := 0; i < m.stride; i += 1 {
-		s[i].arena = m.arena
-		s[i].pool = m.pool
-	}
-	m.buckets = append(m.buckets, s)
-}
-
-func (m *monotonicBuckets[K, V]) Clear() {
-	for _, s := range m.buckets {
-		for _, b := range s {
-			b.DeleteAll()
-		}
-	}
-}
-
-func (m *monotonicBuckets[K, V]) Scan(iter func(K, V) bool) {
-	stop := false
-	for _, s := range m.buckets {
-		for _, b := range s {
-			b.Scan(func(key K, value V) bool {
-				if iter(key, value) != true {
-					stop = true
-					return false
-				}
-				return true
-			})
-			if stop {
-				return
-			}
-		}
-	}
-}
-
-func (m *monotonicBuckets[K, V]) ScanKeys(iter func(int, []K) bool) {
-	m.ScanKeysLimit(iter, m.Cap())
-}
-
-func (m *monotonicBuckets[K, V]) ScanKeysLimit(iter func(int, []K) bool, limit int) {
-	index := 0
-	for _, s := range m.buckets {
-		for _, b := range s {
-			if iter(index, b.keys()) != true {
-				return
-			}
-			index += 1
-			if limit == index {
-				return
-			}
-		}
-	}
-}
-
-func (m *monotonicBuckets[K, V]) String() string {
-	sb := new(strings.Builder)
-	for i, s := range m.buckets {
-		for j, b := range s {
-			fmt.Fprintf(sb, "bucket[%d][%d] = %v\n", i, j, b.keys())
-		}
-	}
-	return sb.String()
-}
-
-func newMonotonicBuckets[K comparable, V any](arena Arena, pool *nodePool[K, V], stride int) *monotonicBuckets[K, V] {
-	m := &monotonicBuckets[K, V]{
-		arena:   arena,
-		pool:    pool,
-		buckets: make([][]LinkedList[K, V], 0), // no uses arena space
-		stride:  stride,
-	}
-	m.Grow()
-	return m
-}
-
-type Map[K comparable, V any] struct {
+type OpenMap[K comparable, V any] struct {
 	arena      Arena
 	hasher     maphash.Hasher[K]
-	buckets    *monotonicBuckets[K, V]
-	size       int
+	buckets    []byte // Unsafe storage to skip GC scanning
+	bucketSize uintptr
+	count      int
 	capacity   int
 	loadFactor float64
 }
 
-func (m *Map[K, V]) Len() int {
-	return m.size
+func (m *OpenMap[K, V]) getBucket(idx int) *bucket[K, V] {
+	offset := uintptr(idx) * m.bucketSize
+	return (*bucket[K, V])(unsafe.Pointer(&m.buckets[offset]))
 }
 
-func (m *Map[K, V]) currentRate() float64 {
-	return float64(m.size) / float64(m.capacity)
+func (m *OpenMap[K, V]) Len() int {
+	return m.count
 }
 
-func (m *Map[K, V]) resize() {
-	newCapacity := m.capacity * 2
-	newBuckets := newMonotonicBuckets[K, V](m.arena, m.buckets.pool, newCapacity)
+func (m *OpenMap[K, V]) index(key K) int {
+	return int(m.hasher.Hash(key)) & (m.capacity - 1)
+}
 
-	m.buckets.Scan(func(key K, value V) bool {
-		i := m.indexFrom(newCapacity, key)
-		newBuckets.Get(i).Swap(key, value)
-		return true
-	})
+func (m *OpenMap[K, V]) Set(key K, value V) (old V, found bool) {
+	if float64(m.count)/float64(m.capacity) > m.loadFactor {
+		m.resize(m.capacity * 2)
+	}
 
-	m.buckets = newBuckets
+	idx := m.index(key)
+	startIdx := idx
+
+	for {
+		b := m.getBucket(idx)
+		if b.state == stateEmpty {
+			// Found empty slot, insert new
+			b.key = Clone(m.arena, key)
+			b.value = Clone(m.arena, value)
+			b.state = stateUsed
+			m.count++
+			return
+		}
+		if b.state == stateUsed && b.key == key {
+			// Update existing
+			old = b.value
+			found = true
+			b.value = Clone(m.arena, value)
+			return
+		}
+
+		idx = (idx + 1) & (m.capacity - 1)
+		if idx == startIdx {
+			m.resize(m.capacity * 2)
+			idx = m.index(key)
+			startIdx = idx
+		}
+	}
+}
+
+func (m *OpenMap[K, V]) Get(key K) (val V, found bool) {
+	if m.capacity == 0 {
+		return
+	}
+	idx := m.index(key)
+	startIdx := idx
+
+	for {
+		b := m.getBucket(idx)
+		if b.state == stateEmpty {
+			return
+		}
+		if b.state == stateUsed && b.key == key {
+			return b.value, true
+		}
+		idx = (idx + 1) & (m.capacity - 1)
+		if idx == startIdx {
+			return
+		}
+	}
+}
+
+func (m *OpenMap[K, V]) Delete(key K) (old V, found bool) {
+	if m.capacity == 0 {
+		return
+	}
+	idx := m.index(key)
+	startIdx := idx
+
+	for {
+		b := m.getBucket(idx)
+		if b.state == stateEmpty {
+			return
+		}
+		if b.state == stateUsed && b.key == key {
+			old = b.value
+			found = true
+			m.count--
+			m.shiftBack(idx)
+			return
+		}
+		idx = (idx + 1) & (m.capacity - 1)
+		if idx == startIdx {
+			return
+		}
+	}
+}
+
+func (m *OpenMap[K, V]) shiftBack(idx int) {
+	// Linear probing backward shift deletion
+	curr := idx
+	for {
+		next := (curr + 1) & (m.capacity - 1)
+		bNext := m.getBucket(next)
+
+		if bNext.state == stateEmpty {
+			// Found empty slot, clear current and return
+			bCurr := m.getBucket(curr)
+			bCurr.state = stateEmpty
+			var zeroK K
+			var zeroV V
+			bCurr.key = zeroK
+			bCurr.value = zeroV
+			return
+		}
+
+		// Check if the element at `next` belongs to the block of elements
+		// that should be shifted back to `curr`.
+		// It should be shifted if its ideal position (hash index) is <= curr.
+		// We must handle wrapping around the buffer.
+
+		ideal := m.index(bNext.key)
+
+		// Determine if `ideal` is logically "before or at" `curr` in the circular buffer.
+		// Valid position range for an element at `next` starts at `ideal` and goes up to `next`.
+		// We want to know if `curr` is within [ideal, next).
+
+		// Three cases due to wrap-around:
+		// 1. ideal <= next: range is [ideal, next]. normal case.
+		//    We shift if curr is in [ideal, next) -> ideal <= curr < next.
+		// 2. ideal > next: range wraps. [ideal, cap) U [0, next].
+		//    We shift if curr is in that range.
+
+		shouldShift := false
+		if ideal <= next {
+			if ideal <= curr && curr < next {
+				shouldShift = true
+			}
+		} else {
+			// Wrapped range
+			if ideal <= curr || curr < next {
+				shouldShift = true
+			}
+		}
+
+		if shouldShift {
+			// Move bucket data from next to curr
+			bCurr := m.getBucket(curr)
+			*bCurr = *bNext // Struct copy
+			curr = next
+		} else {
+			// Cannot shift this element, check the next one.
+			// curr remains empty (logically), we look for a candidate to fill it from further down.
+			// Wait, standard algorithm shifts bucket `next` to `curr` and then `next` becomes the new hole (`curr`).
+			// If we DON'T shift, the hole remains at `curr`, and we check `next+1`.
+			// BUT standard backward shift implementation usually is:
+			//   Scan forward until we find an element that can fill the hole.
+			//   If we find one, move it to hole, and the old position becomes the new hole.
+			//   If we hit EMPTY, we are done.
+
+			// My implementation above was: "check `next`, if it fits, move it".
+			// If it DOES NOT fit (it belongs strictly to `next` or later due to its hash),
+			// we must skip it and check `next+1`?
+			// NO. In linear probing, the cluster must be contiguous.
+			// We cannot skip `next` and move `next+1` to `curr`, because that would break the probe chain for `next`.
+			// So if `next` cannot be shifted, NO subsequent element can be shifted past `next` to `curr`?
+			// Actually, if `next` is correctly placed (e.g. hash(next) == next), it stays.
+			// But maybe `next+1` collided and probed past `next`?
+
+			// Correct algorithm (Knuth):
+			// 1. Let i = index of empty slot.
+			// 2. j = (i + 1) % M.
+			// 3. If T[j] is empty, done.
+			// 4. r = hash(T[j].key).
+			// 5. If (j > i and (r <= i or r > j)) or (j < i and (r <= i and r > j)):
+			//      T[i] = T[j]
+			//      i = j
+			// 6. j = (j + 1) % M
+			// 7. Goto 3
+
+			// My logic:
+			// curr is hole.
+			// next is candidate.
+			// If bucket at next CAN be moved to curr (without violating property), move it and hole moves to next.
+			// If NOT, we just loop again with same curr, incrementing next?
+			// No, `next` is always `curr+1` in my loop.
+			// I need to scan `k = (curr+1)...` until I find a shifter or empty.
+
+			// Re-implementing inner loop properly.
+
+			scan := (curr + 1) & (m.capacity - 1)
+			for {
+				bScan := m.getBucket(scan)
+				if bScan.state == stateEmpty {
+					// End of cluster, clear hole and done
+					bCurr := m.getBucket(curr)
+					bCurr.state = stateEmpty
+					var zeroK K
+					var zeroV V
+					bCurr.key = zeroK
+					bCurr.value = zeroV
+					return
+				}
+
+				ideal := m.index(bScan.key)
+				// Check if `ideal` is NOT in cyclic interval (curr, scan].
+				// If hash(key) is "outside" the interval from hole to current pos,
+				// it means this element "wants" to be closer to hole (or at hole).
+
+				// Interval (curr, scan] means:
+				// if curr < scan: ideal <= curr OR ideal > scan
+				// if scan < curr: ideal <= curr AND ideal > scan
+
+				inInterval := false
+				if curr < scan {
+					if curr < ideal && ideal <= scan {
+						inInterval = true
+					}
+				} else {
+					if curr < ideal || ideal <= scan {
+						inInterval = true
+					}
+				}
+
+				if !inInterval {
+					// Found a candidate to fill `curr`
+					bCurr := m.getBucket(curr)
+					*bCurr = *bScan
+					curr = scan // Hole moves to `scan`
+					break       // Break inner loop, continue outer `shiftBack` with new `curr`
+				}
+
+				scan = (scan + 1) & (m.capacity - 1)
+			}
+		}
+	}
+}
+
+func (m *OpenMap[K, V]) resize(newCapacity int) {
+	oldBuckets := m.buckets
+	oldCapacity := m.capacity // Save old capacity before updating
+
 	m.capacity = newCapacity
-}
 
-func (m *Map[K, V]) index(key K) int {
-	return m.indexFrom(m.capacity, key)
-}
+	// Allocate new buckets as raw bytes
+	var b bucket[K, V]
+	m.bucketSize = unsafe.Sizeof(b)
+	totalSize := uintptr(newCapacity) * m.bucketSize
+	m.buckets = make([]byte, totalSize)
 
-func (m *Map[K, V]) indexFrom(capacity int, key K) int {
-	hash := m.hasher.Hash(key)
-	return int(hash % uint64(capacity))
-}
+	m.count = 0
+	// m.tombstones = 0 // Removed
 
-func (m *Map[K, V]) Set(key K, value V) (old V, found bool) {
-	if m.loadFactor < m.currentRate() {
-		m.resize()
+	if oldCapacity > 0 {
+		oldBucketSize := m.bucketSize // Same size
+		for i := 0; i < oldCapacity; i++ {
+			offset := uintptr(i) * oldBucketSize
+			b := (*bucket[K, V])(unsafe.Pointer(&oldBuckets[offset]))
+			if b.state == stateUsed {
+				m.insertRaw(b.key, b.value)
+			}
+		}
 	}
-	i := m.index(key)
-	b := m.buckets.Get(i)
-	old, found = b.Push(key, value)
-	if found != true {
-		m.size += 1
+}
+
+func (m *OpenMap[K, V]) insertRaw(key K, value V) {
+	idx := m.index(key)
+	for {
+		b := m.getBucket(idx)
+		if b.state == stateEmpty {
+			b.key = key
+			b.value = value
+			b.state = stateUsed
+			m.count++
+			return
+		}
+		idx = (idx + 1) & (m.capacity - 1)
 	}
-	return
 }
 
-func (m *Map[K, V]) Get(key K) (old V, found bool) {
-	i := m.index(key)
-	b := m.buckets.Get(i)
-	old, found = b.Get(key)
-	return
+func (m *OpenMap[K, V]) Clear() {
+	var b bucket[K, V]
+	m.bucketSize = unsafe.Sizeof(b)
+	totalSize := uintptr(m.capacity) * m.bucketSize
+	m.buckets = make([]byte, totalSize)
+	m.count = 0
 }
 
-func (m *Map[K, V]) Delete(key K) (old V, found bool) {
-	i := m.index(key)
-	b := m.buckets.Get(i)
-	old, found = b.Delete(key)
-	if found {
-		m.size -= 1
-	}
-	return
-}
-
-func (m *Map[K, V]) Scan(iter func(K, V) bool) {
-	m.buckets.Scan(iter)
-}
-
-func (m *Map[K, V]) Clear() {
-	m.buckets.Clear()
-	m.size = 0
-}
-
-func (m *Map[K, V]) dump() string {
-	return m.buckets.String()
-}
-
-func NewMap[K comparable, V any](arena Arena, funcs ...OptionFunc) *Map[K, V] {
+func NewOpenMap[K comparable, V any](arena Arena, funcs ...OptionFunc) *OpenMap[K, V] {
 	opt := newOption()
 	for _, fn := range funcs {
 		fn(opt)
 	}
 
-	pool := newNodePool[K, V](arena)
-	m := &Map[K, V]{
+	cap := 1
+	for cap < opt.capacity {
+		cap *= 2
+	}
+
+	m := &OpenMap[K, V]{
 		arena:      arena,
 		hasher:     maphash.NewHasher[K](),
-		buckets:    newMonotonicBuckets[K, V](arena, pool, opt.capacity),
-		size:       0,
-		capacity:   opt.capacity,
+		capacity:   0, // Initialize to 0 so resize treats it as fresh
 		loadFactor: opt.loadFactor,
 	}
+	// Initial allocation
+	m.resize(cap)
 	return m
 }
