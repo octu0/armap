@@ -7,7 +7,7 @@ import (
 
 func TestLinkedList(t *testing.T) {
 	t.Run("string,string", func(tt *testing.T) {
-		a := NewArena(1000, 10)
+		a := NewArena(1000)
 		defer a.Release()
 		l := NewLinkedList[string, string](a)
 
@@ -52,7 +52,7 @@ func TestLinkedList(t *testing.T) {
 		}
 	})
 	t.Run("push/delete/scan", func(tt *testing.T) {
-		a := NewArena(1000, 10)
+		a := NewArena(1000)
 		defer a.Release()
 		l := NewLinkedList[string, string](a)
 

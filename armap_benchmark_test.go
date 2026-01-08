@@ -21,7 +21,7 @@ func BenchmarkMap(b *testing.B) {
 		}
 	})
 	b.Run("armap", func(tb *testing.B) {
-		a := NewArena(1*1024*1024, 400)
+		a := NewArena(1 * 1024 * 1024)
 		defer a.Release()
 		m := NewMap[int, int](a, WithCapacity(tb.N))
 		for i := 0; i < tb.N; i += 1 {
@@ -50,7 +50,7 @@ func BenchmarkSet(b *testing.B) {
 		}
 	})
 	b.Run("armap", func(tb *testing.B) {
-		a := NewArena(1*1024*1024, 400)
+		a := NewArena(1 * 1024 * 1024)
 		defer a.Release()
 		m := NewSet[int](a, WithCapacity(tb.N))
 		for i := 0; i < tb.N; i += 1 {
@@ -92,7 +92,7 @@ func BenchmarkGCSet(b *testing.B) {
 		tb.Logf("min/avg/max/median = %s/%s/%s/%s", elapse[0], mean, elapse[9], median)
 	})
 	b.Run("armap", func(tb *testing.B) {
-		a := NewArena(1*1024*1024, 100)
+		a := NewArena(1 * 1024 * 1024)
 		m := NewSet[*int](a, WithCapacity(100_000_000))
 
 		n := 10

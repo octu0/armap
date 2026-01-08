@@ -3,50 +3,38 @@ package armap
 import (
 	"runtime"
 
-	"github.com/ortuman/nuke"
+	"github.com/pavanmanishd/arena"
 )
 
 type Arena interface {
-	get() nuke.Arena
+	get() *arena.Arena
 
 	Reset()
 	Release()
 }
 
 type wrapArena struct {
-	ar                      nuke.Arena
-	bufferSize, bufferCount int
+	ar         *arena.Arena
+	bufferSize int
 }
 
-func (w *wrapArena) get() nuke.Arena {
+func (w *wrapArena) get() *arena.Arena {
 	return w.ar
 }
 
 func (w *wrapArena) Reset() {
-	defer func() {
-		if rcv := recover(); rcv != nil {
-			// [workaround] invalid memory address or nil pointer dereference
-			w.ar = nuke.NewMonotonicArena(w.bufferSize, w.bufferCount)
-		}
-	}()
-	w.ar.Reset(false)
+	w.ar.Reset()
 	runtime.KeepAlive(w.ar)
 }
 
 func (w *wrapArena) Release() {
-	defer func() {
-		if rcv := recover(); rcv != nil {
-			// [workaround] invalid memory address or nil pointer dereference
-			w.ar = nuke.NewMonotonicArena(w.bufferSize, w.bufferCount)
-		}
-	}()
-	w.ar.Reset(true)
+	w.ar.Release()
 	runtime.KeepAlive(w.ar)
 }
 
-func NewArena(bufferSize, bufferCount int) Arena {
-	ar := nuke.NewMonotonicArena(bufferSize, bufferCount)
-	return &wrapArena{ar, bufferSize, bufferCount}
+func NewArena(bufferSize int) Arena {
+	ar := arena.NewArena(bufferSize)
+	return &wrapArena{ar, bufferSize}
 }
 
 type TypeArena[T any] interface {
@@ -62,55 +50,68 @@ type TypeArena[T any] interface {
 }
 
 var (
-	_ TypeArena[any] = (*safeArena[any])(nil)
+	_ TypeArena[any] = (*typedArena[any])(nil)
 )
 
-type safeArena[T any] struct {
+type typedArena[T any] struct {
 	arena Arena
 }
 
-func (s *safeArena[T]) New() (t *T) {
-	return nuke.New[T](s.arena.get())
+func (s *typedArena[T]) New() (t *T) {
+	return arena.Alloc[T](s.arena.get())
 }
 
-func (s *safeArena[T]) NativeNew() (t *T) {
+func (s *typedArena[T]) NativeNew() (t *T) {
 	return new(T)
 }
 
-func (s *safeArena[T]) NewValue(newFunc func(*T)) (t *T) {
-	t = nuke.New[T](s.arena.get())
+func (s *typedArena[T]) NewValue(newFunc func(*T)) (t *T) {
+	t = arena.Alloc[T](s.arena.get())
 	newFunc(t)
 	return
 }
 
-func (s *safeArena[T]) NativeNewValue(newFunc func(*T)) (t *T) {
+func (s *typedArena[T]) NativeNewValue(newFunc func(*T)) (t *T) {
 	t = new(T)
 	newFunc(t)
 	return
 }
 
-func (s *safeArena[T]) MakeSlice(size int, capacity int) (t []T) {
-	return nuke.MakeSlice[T](s.arena.get(), size, capacity)
+func (s *typedArena[T]) MakeSlice(size int, capacity int) []T {
+	slice := arena.AllocSliceZeroed[T](s.arena.get(), capacity)
+	return slice[:size]
 }
 
-func (s *safeArena[T]) NativeMakeSlice(size int, capacity int) (t []T) {
+func (s *typedArena[T]) NativeMakeSlice(size int, capacity int) []T {
 	return make([]T, size, capacity)
 }
 
-func (s *safeArena[T]) AppendSlice(o []T, v ...T) (t []T) {
-	return nuke.SliceAppend[T](s.arena.get(), o, v...)
+func (s *typedArena[T]) AppendSlice(o []T, v ...T) []T {
+	if len(o)+len(v) <= cap(o) {
+		return append(o, v...)
+	}
+	return s.growSlice(o, v)
 }
 
-func (s *safeArena[T]) Reset() {
+func (s *typedArena[T]) growSlice(o []T, v []T) []T {
+	capacity := cap(o)
+	newSize := len(o) + len(v)
+	newCapacity := ((newSize / capacity) + 1) * 2
+
+	slice := arena.AllocSliceZeroed[T](s.arena.get(), newCapacity)
+	copy(slice, o)
+	copy(slice[len(o):], v)
+	return slice[:newSize]
+}
+
+func (s *typedArena[T]) Reset() {
 	s.arena.Reset()
-	runtime.KeepAlive(s.arena)
 }
 
-func (s *safeArena[T]) Release() {
+func (s *typedArena[T]) Release() {
 	s.arena.Release()
-	runtime.KeepAlive(s.arena)
 }
 
 func NewTypeArena[T any](a Arena) TypeArena[T] {
-	return &safeArena[T]{a}
+	return &typedArena[T]{a}
 }

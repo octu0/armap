@@ -5,7 +5,7 @@ import (
 )
 
 func ExampleMap() {
-	a := NewArena(1024*1024, 2) // 2MB arena size
+	a := NewArena(2 * 1024 * 1024) // 2MB arena size
 	defer a.Release()
 	m := NewMap[string, string](a, WithCapacity(1000))
 
@@ -29,7 +29,7 @@ func ExampleMap() {
 }
 
 func ExampleSet() {
-	a := NewArena(1024*1024, 2) // 2MB arena size
+	a := NewArena(2 * 1024 * 1024) // 2MB arena size
 	defer a.Release()
 	s := NewSet[string](a, WithCapacity(1000))
 
@@ -58,7 +58,7 @@ func ExampleSet() {
 }
 
 func ExampleLinkedList() {
-	a := NewArena(1024*1024, 2) // 2MB arena size
+	a := NewArena(2 * 1024 * 1024) // 2MB arena size
 	defer a.Release()
 	l := NewLinkedList[string, string](a)
 

@@ -9,7 +9,7 @@ import (
 func TestMap(t *testing.T) {
 	t.Run("1000", func(tt *testing.T) {
 		N := 10
-		a := NewArena(1024*1024, 4)
+		a := NewArena(1024 * 1024)
 		defer a.Release()
 		m := NewMap[string, string](a, WithCapacity(N))
 
@@ -65,7 +65,7 @@ func TestMap(t *testing.T) {
 		key3 := "key3"
 		value3 := key3 + ".value"
 
-		a := NewArena(1000, 10)
+		a := NewArena(1000)
 		defer a.Release()
 		m := NewMap[string, string](a)
 
@@ -149,7 +149,7 @@ func TestMap(t *testing.T) {
 	})
 
 	t.Run("too_large_size_small_cap", func(tt *testing.T) {
-		a := NewArena(1024*1024*64, 10)
+		a := NewArena(1024 * 1024 * 64)
 		defer a.Release()
 
 		m := NewMap[string, int](a, WithCapacity(64))
