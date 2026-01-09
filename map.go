@@ -1,6 +1,7 @@
 package armap
 
 import (
+	"fmt"
 	"unsafe"
 
 	"github.com/dolthub/maphash"
@@ -331,6 +332,9 @@ func (m *Map[K, V]) Clear() {
 }
 
 func NewMap[K comparable, V any](arena Arena, funcs ...OptionFunc) *Map[K, V] {
+	checkType[K](arena)
+	checkType[V](arena)
+
 	opt := newOption()
 	for _, fn := range funcs {
 		fn(opt)
@@ -349,4 +353,16 @@ func NewMap[K comparable, V any](arena Arena, funcs ...OptionFunc) *Map[K, V] {
 	}
 	m.resize(capacity)
 	return m
+}
+
+func checkType[T any](arena Arena) {
+	defer func() {
+		if r := recover(); r != nil {
+			panic(fmt.Sprintf("armap: type %T cannot be used in Map (likely due to unexported fields preventing clone): %v", *new(T), r))
+		}
+	}()
+
+	ta := NewTypeArena[T](arena)
+	var zero T
+	_ = ta.Clone(zero)
 }

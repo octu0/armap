@@ -74,4 +74,42 @@ func TestSet(t *testing.T) {
 			tt.Errorf("test1 is deleted")
 		}
 	})
+
+	t.Run("PublicStruct", func(tt *testing.T) {
+		type PublicStruct struct {
+			ID   int
+			Name string
+		}
+		a := NewArena(1024)
+		defer a.Release()
+		s := NewSet[PublicStruct](a)
+
+		val := PublicStruct{ID: 1, Name: "test"}
+		if ok := s.Add(val); ok {
+			tt.Errorf("val is new key")
+		}
+		if ok := s.Contains(val); ok != true {
+			tt.Errorf("val exists")
+		}
+		if ok := s.Delete(val); ok != true {
+			tt.Errorf("val exists")
+		}
+	})
+
+	t.Run("PrivateStruct", func(tt *testing.T) {
+		type PrivateStruct struct {
+			id   int
+			name string
+		}
+		a := NewArena(1024)
+		defer a.Release()
+
+		defer func() {
+			if r := recover(); r == nil {
+				tt.Errorf("expected panic for PrivateStruct key")
+			}
+		}()
+
+		NewSet[PrivateStruct](a)
+	})
 }
