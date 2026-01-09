@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strconv"
 	"testing"
+	"time"
 )
 
 func TestMap(t *testing.T) {
@@ -195,5 +196,56 @@ func TestMap(t *testing.T) {
 		if count != 1 {
 			tt.Errorf("count = %d, expected 1", count)
 		}
+	})
+
+	t.Run("string,time.Time", func(tt *testing.T) {
+		a := NewArena(1024)
+		defer a.Release()
+
+		defer func() {
+			if r := recover(); r == nil {
+				tt.Errorf("expected panic for time.Time value")
+			}
+		}()
+
+		NewMap[string, time.Time](a)
+	})
+
+	t.Run("string,PublicStruct", func(tt *testing.T) {
+		type PublicStruct struct {
+			ID   int
+			Name string
+		}
+		a := NewArena(1024)
+		defer a.Release()
+		m := NewMap[string, PublicStruct](a)
+
+		val := PublicStruct{ID: 1, Name: "test"}
+		key := "p1"
+
+		m.Set(key, val)
+
+		if v, ok := m.Get(key); !ok {
+			tt.Errorf("key %s not found", key)
+		} else if v != val {
+			tt.Errorf("value mismatch: got %v, want %v", v, val)
+		}
+	})
+
+	t.Run("string,PrivateStruct", func(tt *testing.T) {
+		type PrivateStruct struct {
+			id   int
+			name string
+		}
+		a := NewArena(1024)
+		defer a.Release()
+
+		defer func() {
+			if r := recover(); r == nil {
+				tt.Errorf("expected panic for PrivateStruct value")
+			}
+		}()
+
+		NewMap[string, PrivateStruct](a)
 	})
 }
